@@ -257,6 +257,10 @@ const Markets = () => {
                             <span className="nav-icon">💱</span>
                             <span className="nav-text">Markets</span>
                         </li>
+                        <li className="nav-item" onClick={() => navigate('/assets')}>
+                            <span className="nav-icon">💎</span>
+                            <span className="nav-text">Assets</span>
+                        </li>
                         <li className="nav-item">
                             <span className="nav-icon">💰</span>
                             <span className="nav-text">Trade</span>
