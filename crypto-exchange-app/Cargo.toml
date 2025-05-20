@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-diesel = { version = "2.2.0", features = ["postgres", "chrono", "r2d2"] }
+diesel = { version = "2.2.0", features = ["postgres", "chrono", "r2d2", "numeric"] }
 dotenv = "0.15.0"
 chrono = { version = "0.4.19", features = ["clock", "serde"] }
 actix = "0.13.0"
@@ -42,3 +42,8 @@ hex = "0.4"
 sha3 = "0.10"
 k256 = { version = "0.11.6", features = ["ecdsa"] }
 aes-gcm = "0.10"
+secp256k1 = "0.28.0"
+bs58 = "0.5.0"
+ripemd160 = "0.9.1"
+sha2 = "0.10.7"
+bigdecimal = { version = "0.4", features = ["serde"] }

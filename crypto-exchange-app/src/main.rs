@@ -1372,6 +1372,15 @@ async fn main() -> std::io::Result<()> {
             .supports_credentials()
             .max_age(3600);
 
+        // Create the wallet scope inside the closure instead
+        let wallet_scope = web::scope("/wallet")
+            // Make sure list_wallets is registered BEFORE any parameter-based routes
+            .service(wallets::list_wallets)  // This should come first!
+            .service(wallets::create_wallet)
+            .service(wallets::generate_address)
+            .service(wallets::get_wallet)    // This likely has a param that's catching "list"
+            .service(wallets::update_balance);
+
         App::new()
             .app_data(web::Data::new(pool.clone()))
             .wrap(actix_web::middleware::Logger::default())
@@ -1404,7 +1413,7 @@ async fn main() -> std::io::Result<()> {
                     .service(admin_update_user), // Remove the password reset endpoint from here
             )
             .service(markets::get_markets) // Add the markets endpoint
-            .configure(wallets::configure_routes) // Add wallet routes
+            .service(wallet_scope) // Keep only this wallet registration
     })
     .bind(format!("{}:{}", host, port))?
     .run()

@@ -1,201 +1,23 @@
-use crate::db::DbPool;
-use crate::models::{Wallet, NewWallet};
-use crate::schema::wallets;
-use actix_web::{web, HttpRequest, HttpResponse, get, post};
-use diesel::prelude::*;
-use diesel::RunQueryDsl;
-use rand::{thread_rng, Rng};
-use serde::{Deserialize, Serialize};
-use sha3::{Digest, Keccak256};
-use hex;
-use k256::elliptic_curve::{ScalarCore, sec1::EncodedPoint};
-use k256::{PublicKey, SecretKey};
-use k256::elliptic_curve::sec1::ToEncodedPoint;
-use aes_gcm::{
-    aead::{Aead, KeyInit},
-    Aes256Gcm, Nonce,
-};
-use chrono::Utc;
-use std::str::FromStr;
 use crate::auth;
+use crate::db::DbPool;
+use crate::models::{
+    CreateWalletRequest, GenerateAddressRequest, NewWallet, NewWalletAddress, NewWalletBalance,
+    Wallet, WalletAddress, WalletAddressResponse, WalletBalance, WalletBalanceResponse,
+    WalletResponseWithAddresses,
+};
+use crate::schema::{wallet_addresses, wallet_balances, wallets};
+use actix_web::{HttpRequest, HttpResponse, get, post, web};
+use bigdecimal::BigDecimal;
+use chrono::Utc;
+use diesel::RunQueryDsl;
+use diesel::prelude::*;
+use log::{error, info};
+use serde::{Deserialize, Serialize};
+use std::str::FromStr;
 
-#[derive(Deserialize)]
-pub struct CreateWalletRequest {
-    pub wallet_type: String,
-    pub network: String,
-}
+pub mod crypto_addresses;
 
-#[derive(Serialize)]
-pub struct WalletResponse {
-    pub wallet_id: i64,
-    pub user_id: i32,
-    pub wallet_type: String,
-    pub address: String,
-    pub network: String,
-    pub status: String,
-    pub created_at: chrono::NaiveDateTime,
-}
-
-impl From<Wallet> for WalletResponse {
-    fn from(wallet: Wallet) -> Self {
-        Self {
-            wallet_id: wallet.wallet_id,
-            user_id: wallet.user_id,
-            wallet_type: wallet.wallet_type,
-            address: wallet.address,
-            network: wallet.network,
-            status: wallet.status,
-            created_at: wallet.created_at,
-        }
-    }
-}
-
-// Mock mnemonic generator for non-custodial wallets
-fn generate_seed_phrase() -> String {
-    // List of BIP-39 words (abbreviated for simplicity)
-    const WORDS: [&str; 20] = [
-        "abandon", "ability", "able", "about", "above",
-        "absent", "absorb", "abstract", "absurd", "abuse",
-        "access", "accident", "account", "accuse", "achieve",
-        "acid", "acoustic", "acquire", "across", "act",
-    ];
-    
-    // Generate 12 random words for the seed phrase
-    let mut rng = thread_rng();
-    let phrase: Vec<&str> = (0..12)
-        .map(|_| WORDS[rng.gen_range(0..WORDS.len())])
-        .collect();
-    
-    phrase.join(" ")
-}
-
-// Generate a private key as a 256-bit random number
-fn generate_private_key() -> SecretKey {
-    let mut rng = thread_rng();
-    
-    // Use the built-in random generation from k256
-    SecretKey::random(&mut rng)
-}
-
-// Derive public key from private key using elliptic curve multiplication
-fn derive_public_key(private_key: &SecretKey) -> PublicKey {
-    PublicKey::from_secret_scalar(&private_key.to_nonzero_scalar())
-}
-
-// Generate Ethereum address from public key
-fn generate_ethereum_address(public_key: &PublicKey) -> String {
-    // Convert public key to uncompressed bytes (65 bytes, starting with 0x04)
-    let public_key_bytes = public_key.to_encoded_point(false);
-    
-    // Skip the first byte (0x04) which indicates uncompressed format
-    let public_key_bytes = &public_key_bytes.as_bytes()[1..];
-    
-    // Hash the public key with Keccak-256
-    let mut hasher = Keccak256::new_with_prefix(public_key_bytes);
-    let hash = hasher.finalize();
-    
-    // Take the last 20 bytes of the hash
-    let eth_address = &hash[12..32];
-    
-    // Convert to checksummed address according to EIP-55
-    let address = format!("0x{}", hex::encode(eth_address));
-    
-    // Apply EIP-55 checksum
-    eip55_checksum(&address)
-}
-
-// Implementation of EIP-55 checksum
-fn eip55_checksum(address: &str) -> String {
-    // Remove '0x' prefix if present
-    let address_no_prefix = if address.starts_with("0x") {
-        &address[2..]
-    } else {
-        address
-    };
-    
-    // Convert to lowercase
-    let address_lower = address_no_prefix.to_lowercase();
-    
-    // Hash the lowercase address
-    // Hash the lowercase address
-    let mut hasher = Keccak256::new_with_prefix(address_lower.as_bytes());
-    let hash = hasher.finalize();
-    
-    // Apply checksum rules
-    let mut checksummed = String::with_capacity(42); // 0x + 40 hex chars
-    checksummed.push_str("0x");
-    
-    for (i, ch) in address_lower.char_indices() {
-        if ch.is_digit(16) { // If it's a hex digit
-            // Check if the corresponding hash nibble is >= 8
-            let hash_byte = hash[i / 2];
-            let hash_nibble = if i % 2 == 0 {
-                hash_byte >> 4
-            } else {
-                hash_byte & 0x0F
-            };
-            
-            if hash_nibble >= 8 {
-                // Convert to uppercase if the hash nibble is >= 8
-                checksummed.push(ch.to_ascii_uppercase());
-            } else {
-                checksummed.push(ch);
-            }
-        } else {
-            checksummed.push(ch);
-        }
-    }
-    
-    checksummed
-}
-
-// Encrypt private key or seed phrase with AES-256-GCM
-fn encrypt_sensitive_data(data: &str, secret_key: &[u8]) -> Result<(String, String, String), String> {
-    let mut rng = thread_rng();
-    
-    // Generate a random 12-byte nonce
-    let mut nonce_bytes = [0u8; 12];
-    rng.fill(&mut nonce_bytes);
-    
-    let nonce = Nonce::from_slice(&nonce_bytes);
-    
-    // Create cipher instance
-    let cipher = match Aes256Gcm::new_from_slice(secret_key) {
-        Ok(c) => c,
-        Err(_) => return Err("Failed to create cipher".to_string()),
-    };
-    
-    // Encrypt the data
-    let ciphertext = match cipher.encrypt(nonce, data.as_bytes().as_ref()) {
-        Ok(c) => c,
-        Err(_) => return Err("Encryption failed".to_string()),
-    };
-    
-    // Convert to hex for storage
-    let encrypted_data = hex::encode(&ciphertext);
-    let iv = hex::encode(nonce_bytes);
-    
-    // For simplicity, use part of the ciphertext as the auth tag
-    // In a real implementation, you would properly extract the auth tag from the AES-GCM operation
-    let auth_tag = hex::encode(&ciphertext[ciphertext.len().saturating_sub(16)..]);
-    
-    Ok((encrypted_data, iv, auth_tag))
-}
-
-// Get the application encryption key - in a real app, this would be properly managed
-fn get_encryption_key() -> [u8; 32] {
-    // In production, this would be securely stored and retrieved,
-    // possibly using a KMS or secure environment variables
-    let mut key = [0u8; 32];
-    
-    // Use a hardcoded value for the mock implementation
-    // IMPORTANT: This is for demonstration only!
-    let mock_key = b"cryptocurrency-exchange-mock-key-32";
-    key.copy_from_slice(&mock_key[0..32]);
-    
-    key
-}
-
+// Create a new multi-chain wallet
 #[post("/create")]
 pub async fn create_wallet(
     req: HttpRequest,
@@ -204,7 +26,7 @@ pub async fn create_wallet(
 ) -> Result<HttpResponse, actix_web::Error> {
     // Extract user_id from JWT token
     let user_id = auth::extract_user_id(&req)?;
-    
+
     // Validate wallet type
     let wallet_type = wallet_req.wallet_type.to_uppercase();
     if wallet_type != "CUSTODIAL" && wallet_type != "NON_CUSTODIAL" {
@@ -212,88 +34,328 @@ pub async fn create_wallet(
             "error": "Invalid wallet type. Must be CUSTODIAL or NON_CUSTODIAL."
         })));
     }
-    
-    // Validate network
-    let network = wallet_req.network.to_uppercase();
-    if network != "ETHEREUM" && network != "ETHEREUM_TESTNET" {
-        return Ok(HttpResponse::BadRequest().json(serde_json::json!({
-            "error": "Invalid network. Must be ETHEREUM or ETHEREUM_TESTNET."
-        })));
-    }
-    
-    // Generate private key and derive public key and address
-    let private_key = generate_private_key();
-    let public_key = derive_public_key(&private_key);
-    let address = generate_ethereum_address(&public_key);
-    
-    // Convert to string representations
-    
-    let private_key_hex = hex::encode(private_key.to_nonzero_scalar().to_bytes());
-    let public_key_hex = hex::encode(public_key.to_encoded_point(false).as_bytes());
-    
-    // Get encryption key for securing sensitive data
-    let encryption_key = get_encryption_key();
-    
-    // Encrypt private key
-    let (encrypted_private_key, encryption_iv, encryption_auth_tag) = 
-        encrypt_sensitive_data(&private_key_hex, &encryption_key)
-            .map_err(|e| actix_web::error::ErrorInternalServerError(e))?;
-    
-    // For NON_CUSTODIAL wallets, generate and encrypt a seed phrase
-    let (seed_phrase_encrypted, seed_phrase_iv, seed_phrase_auth_tag) = if wallet_type == "NON_CUSTODIAL" {
-        let seed_phrase = generate_seed_phrase();
-        let (encrypted, iv, tag) = encrypt_sensitive_data(&seed_phrase, &encryption_key)
-            .map_err(|e| actix_web::error::ErrorInternalServerError(e))?;
-        (Some(encrypted), Some(iv), Some(tag))
-    } else {
-        (None, None, None)
-    };
-    
-    // Create new wallet record
+
+    // Generate a default name if not provided
+    let name = wallet_req
+        .name
+        .clone()
+        .unwrap_or_else(|| "My Wallet".to_string());
+
+    // Create new wallet record (chain-agnostic)
     let new_wallet = NewWallet {
         user_id,
         wallet_type: wallet_type.clone(),
-        address: address.clone(),
-        public_key: public_key_hex,
-        encrypted_private_key,
-        encryption_iv,
-        encryption_auth_tag,
-        seed_phrase_encrypted,
-        seed_phrase_iv,
-        seed_phrase_auth_tag,
-        network: network.clone(),
         status: "ACTIVE".to_string(),
+        name: name,
     };
-    
+
     // Save to database
     let mut conn = pool
         .get()
         .map_err(|_| actix_web::error::ErrorInternalServerError("Database connection error"))?;
-    
-    let wallet = web::block(move || {
+
+    let wallet_result = web::block(move || {
         diesel::insert_into(wallets::table)
             .values(&new_wallet)
             .get_result::<Wallet>(&mut conn)
     })
     .await
     .map_err(|e| {
-        log::error!("Failed to create wallet: {:?}", e);
-        actix_web::error::ErrorInternalServerError("Failed to create wallet")
-    })?
-    .map_err(|e| {
-        log::error!("Database error: {:?}", e);
+        error!("Failed to create wallet: {:?}", e);
         actix_web::error::ErrorInternalServerError("Failed to create wallet")
     })?;
-    
-    // Return the new wallet info (excluding sensitive data)
-    let wallet_response = WalletResponse::from(wallet);
-    
+
+    let wallet = wallet_result.map_err(|e| {
+        error!("Diesel error creating wallet: {:?}", e);
+        actix_web::error::ErrorInternalServerError("Database error creating wallet")
+    })?;
+
+    // Return the new wallet info
     Ok(HttpResponse::Created().json(serde_json::json!({
         "message": "Wallet created successfully",
-        "wallet": wallet_response
+        "wallet": {
+            "wallet_id": wallet.wallet_id,
+            "user_id": wallet.user_id,
+            "wallet_type": wallet.wallet_type,
+            "name": wallet.name,
+            "status": wallet.status,
+            "created_at": wallet.created_at,
+            "addresses": [],
+            "balances": []
+        }
     })))
 }
 
+// Generate a cryptocurrency address for a wallet
+#[post("/address/generate")]
+pub async fn generate_address(
+    req: HttpRequest,
+    pool: web::Data<DbPool>,
+    address_req: web::Json<GenerateAddressRequest>,
+) -> Result<HttpResponse, actix_web::Error> {
+    // Extract user_id from JWT token
+    let user_id = auth::extract_user_id(&req)?;
+
+    // Validate cryptocurrency
+    let cryptocurrency = address_req.cryptocurrency.to_uppercase();
+    if !["BTC", "ETH", "BTC_TESTNET", "ETH_TESTNET"].contains(&cryptocurrency.as_str()) {
+        return Ok(HttpResponse::BadRequest().json(serde_json::json!({
+            "error": "Invalid cryptocurrency. Supported values: BTC, ETH, BTC_TESTNET, ETH_TESTNET."
+        })));
+    }
+
+    // Verify wallet ownership and existence
+    let mut conn = pool
+        .get()
+        .map_err(|_| actix_web::error::ErrorInternalServerError("Database connection error"))?;
+
+    let wallet_id = address_req.wallet_id;
+    let wallet = web::block(move || {
+        wallets::table
+            .filter(wallets::wallet_id.eq(wallet_id))
+            .filter(wallets::user_id.eq(user_id))
+            .first::<Wallet>(&mut conn)
+            .optional()
+    })
+    .await
+    .map_err(|e| {
+        error!("Database error: {:?}", e);
+        actix_web::error::ErrorInternalServerError("Failed to verify wallet")
+    })?;
+
+    let wallet = match wallet {
+        Ok(Some(w)) => w,
+        Ok(None) => {
+            return Ok(HttpResponse::NotFound().json(serde_json::json!({
+                "error": "Wallet not found or you don't have permission to access it"
+            })));
+        }
+        Err(_) => {
+            return Ok(HttpResponse::InternalServerError().json(serde_json::json!({
+                "error": "Database error when verifying wallet"
+            })));
+        }
+    };
+
+    // Check if address for this cryptocurrency already exists
+    let mut conn = pool
+        .get()
+        .map_err(|_| actix_web::error::ErrorInternalServerError("Database connection error"))?;
+
+    let cryptocurrency_clone = cryptocurrency.clone();
+    let existing_address = web::block(move || {
+        wallet_addresses::table
+            .filter(wallet_addresses::wallet_id.eq(wallet_id))
+            .filter(wallet_addresses::cryptocurrency.eq(&cryptocurrency_clone))
+            .first::<WalletAddress>(&mut conn)
+            .optional()
+    })
+    .await
+    .map_err(|e| {
+        error!("Database error: {:?}", e);
+        actix_web::error::ErrorInternalServerError("Failed to check existing addresses")
+    })?;
+
+    if let Ok(Some(address)) = existing_address {
+        // Address already exists for this cryptocurrency
+        return Ok(HttpResponse::BadRequest().json(serde_json::json!({
+            "error": format!("Address for {} already exists for this wallet", cryptocurrency),
+            "address": address.address
+        })));
+    }
+
+    // Generate a new address for the selected cryptocurrency
+    let address_generator = crypto_addresses::create_address_generator(&cryptocurrency);
+    let (address, private_key) = match address_generator.generate_address() {
+        Ok((addr, key)) => (addr, key),
+        Err(e) => {
+            error!("Failed to generate address: {:?}", e);
+            return Ok(HttpResponse::InternalServerError().json(serde_json::json!({
+                "error": "Failed to generate cryptocurrency address"
+            })));
+        }
+    };
+
+    // Print private key to console for debugging (in a real system, this would be securely handled)
+    info!(
+        "Generated address for {} wallet {}: {}",
+        cryptocurrency, wallet_id, address
+    );
+    info!("Private key (for demonstration only): {}", private_key);
+
+    // Store the new address in the database
+    let mut conn = pool
+        .get()
+        .map_err(|_| actix_web::error::ErrorInternalServerError("Database connection error"))?;
+
+    let new_address = NewWalletAddress {
+        wallet_id,
+        cryptocurrency: cryptocurrency.clone(),
+        address: address.clone(),
+    };
+
+    let saved_address = web::block(move || {
+        diesel::insert_into(wallet_addresses::table)
+            .values(&new_address)
+            .get_result::<WalletAddress>(&mut conn)
+    })
+    .await
+    .map_err(|e| {
+        error!("Failed to save address: {:?}", e);
+        actix_web::error::ErrorInternalServerError("Failed to save address")
+    })?
+    .map_err(|e| {
+        error!("Diesel error saving address: {:?}", e);
+        actix_web::error::ErrorInternalServerError("Database error saving address")
+    })?;
+
+    // Create initial balance record with zero balance
+    let mut conn = pool
+        .get()
+        .map_err(|_| actix_web::error::ErrorInternalServerError("Database connection error"))?;
+
+    let new_balance = NewWalletBalance {
+        wallet_id,
+        cryptocurrency: cryptocurrency.clone(),
+        balance: BigDecimal::from_str("0").unwrap(),
+    };
+
+    let _ = web::block(move || {
+        diesel::insert_into(wallet_balances::table)
+            .values(&new_balance)
+            .on_conflict((wallet_balances::wallet_id, wallet_balances::cryptocurrency))
+            .do_nothing()
+            .execute(&mut conn)
+    })
+    .await
+    .map_err(|e| {
+        error!("Failed to save initial balance: {:?}", e);
+        actix_web::error::ErrorInternalServerError("Failed to initialize balance")
+    })?;
+
+    // Return the saved address
+    Ok(HttpResponse::Created().json(serde_json::json!({
+        "message": format!("{} address generated successfully", cryptocurrency),
+        "address": {
+            "cryptocurrency": saved_address.cryptocurrency,
+            "address": saved_address.address,
+            "created_at": saved_address.created_at
+        }
+    })))
+}
+
+// Get wallet details including all addresses and balances
+#[get("/{wallet_id}")]
+pub async fn get_wallet(
+    req: HttpRequest,
+    pool: web::Data<DbPool>,
+    path: web::Path<i64>,
+) -> Result<HttpResponse, actix_web::Error> {
+    // Extract user_id from JWT token
+    let user_id = auth::extract_user_id(&req)?;
+    let wallet_id = path.into_inner();
+
+    // Get wallet, addresses, and balances
+    let mut conn = pool
+        .get()
+        .map_err(|_| actix_web::error::ErrorInternalServerError("Database connection error"))?;
+
+    // Verify wallet ownership and existence
+    let wallet = web::block(move || {
+        wallets::table
+            .filter(wallets::wallet_id.eq(wallet_id))
+            .filter(wallets::user_id.eq(user_id))
+            .first::<Wallet>(&mut conn)
+            .optional()
+    })
+    .await
+    .map_err(|e| {
+        error!("Database error: {:?}", e);
+        actix_web::error::ErrorInternalServerError("Failed to retrieve wallet")
+    })?;
+
+    let wallet = match wallet {
+        Ok(Some(w)) => w,
+        Ok(None) => {
+            return Ok(HttpResponse::NotFound().json(serde_json::json!({
+                "error": "Wallet not found or you don't have permission to access it"
+            })));
+        }
+        Err(_) => {
+            return Ok(HttpResponse::InternalServerError().json(serde_json::json!({
+                "error": "Database error when retrieving wallet"
+            })));
+        }
+    };
+
+    // Get addresses for this wallet
+    let mut conn = pool
+        .get()
+        .map_err(|_| actix_web::error::ErrorInternalServerError("Database connection error"))?;
+
+    let addresses = web::block(move || {
+        wallet_addresses::table
+            .filter(wallet_addresses::wallet_id.eq(wallet_id))
+            .load::<WalletAddress>(&mut conn)
+    })
+    .await
+    .map_err(|e| {
+        error!("Failed to load addresses: {:?}", e);
+        actix_web::error::ErrorInternalServerError("Failed to load wallet addresses")
+    })?;
+
+    // Get balances for this wallet
+    let mut conn = pool
+        .get()
+        .map_err(|_| actix_web::error::ErrorInternalServerError("Database connection error"))?;
+
+    let balances = web::block(move || {
+        wallet_balances::table
+            .filter(wallet_balances::wallet_id.eq(wallet_id))
+            .load::<WalletBalance>(&mut conn)
+    })
+    .await
+    .map_err(|e| {
+        error!("Failed to load balances: {:?}", e);
+        actix_web::error::ErrorInternalServerError("Failed to load wallet balances")
+    })?;
+
+    // Construct response
+    let addresses_response: Vec<WalletAddressResponse> = addresses
+        .unwrap_or_default()
+        .into_iter()
+        .map(|addr| WalletAddressResponse {
+            cryptocurrency: addr.cryptocurrency,
+            address: addr.address,
+            created_at: addr.created_at,
+        })
+        .collect();
+
+    let balances_response: Vec<WalletBalanceResponse> = balances
+        .unwrap_or_default()
+        .into_iter()
+        .map(|bal| WalletBalanceResponse {
+            cryptocurrency: bal.cryptocurrency,
+            balance: bal.balance.to_string(),
+            last_updated: bal.last_updated,
+        })
+        .collect();
+
+    let wallet_response = WalletResponseWithAddresses {
+        wallet_id: wallet.wallet_id,
+        user_id: wallet.user_id,
+        wallet_type: wallet.wallet_type,
+        name: wallet.name,
+        status: wallet.status,
+        created_at: wallet.created_at,
+        addresses: addresses_response,
+        balances: balances_response,
+    };
+
+    Ok(HttpResponse::Ok().json(serde_json::json!({ "wallet": wallet_response })))
+}
+
+// List all wallets with their addresses and balances
 #[get("/list")]
 pub async fn list_wallets(
     req: HttpRequest,
@@ -301,36 +363,255 @@ pub async fn list_wallets(
 ) -> Result<HttpResponse, actix_web::Error> {
     // Extract user_id from JWT token
     let user_id = auth::extract_user_id(&req)?;
-    
-    // Query all wallets for this user
+
+    // Query all wallets for this user with proper error handling
+    let mut conn = pool.get().map_err(|e| {
+        error!("Failed to get DB connection: {}", e);
+        actix_web::error::ErrorInternalServerError("Database connection error")
+    })?;
+
+    let result = web::block(
+        move || -> Result<Vec<WalletResponseWithAddresses>, diesel::result::Error> {
+            // Get all wallets for this user
+            let wallets: Vec<Wallet> = wallets::table
+                .filter(wallets::user_id.eq(user_id))
+                .load::<Wallet>(&mut conn)?;
+
+            let mut wallet_responses = Vec::new();
+
+            for wallet in wallets {
+                // Get addresses for this wallet
+                let addresses = wallet_addresses::table
+                    .filter(wallet_addresses::wallet_id.eq(wallet.wallet_id))
+                    .load::<WalletAddress>(&mut conn)?;
+
+                // Get balances for this wallet
+                let balances = wallet_balances::table
+                    .filter(wallet_balances::wallet_id.eq(wallet.wallet_id))
+                    .load::<WalletBalance>(&mut conn)
+                    .optional()?;
+
+                let addresses_response = addresses
+                    .iter()
+                    .map(|addr| WalletAddressResponse {
+                        cryptocurrency: addr.cryptocurrency.clone(),
+                        address: addr.address.clone(),
+                        created_at: addr.created_at,
+                    })
+                    .collect();
+
+                let balances_response = balances
+                    .unwrap_or_default()
+                    .into_iter()
+                    .map(|bal| WalletBalanceResponse {
+                        cryptocurrency: bal.cryptocurrency,
+                        balance: bal.balance.to_string(),
+                        last_updated: bal.last_updated,
+                    })
+                    .collect();
+
+                wallet_responses.push(WalletResponseWithAddresses {
+                    wallet_id: wallet.wallet_id,
+                    user_id: wallet.user_id,
+                    wallet_type: wallet.wallet_type,
+                    name: wallet.name,
+                    status: wallet.status,
+                    created_at: wallet.created_at,
+                    addresses: addresses_response,
+                    balances: balances_response,
+                });
+            }
+
+            Ok(wallet_responses)
+        },
+    )
+    .await
+    .map_err(|e| {
+        error!("Error listing wallets: {:?}", e);
+        actix_web::error::ErrorInternalServerError("Failed to list wallets")
+    })?;
+
+    // Unwrap the inner Result to get the actual wallet responses
+    // This is the important change - unwrap the inner diesel::result::Error
+    let wallet_responses = result.map_err(|e| {
+        error!("Diesel error listing wallets: {:?}", e);
+        actix_web::error::ErrorInternalServerError("Database error listing wallets")
+    })?;
+
+    // Return the wallets array correctly wrapped in a JSON object
+    Ok(HttpResponse::Ok().json(serde_json::json!({ "wallets": wallet_responses })))
+}
+
+// Update wallet balance (for simulating trades, deposits, withdrawals)
+#[post("/balance/update")]
+pub async fn update_balance(
+    req: HttpRequest,
+    pool: web::Data<DbPool>,
+    balance_req: web::Json<UpdateBalanceRequest>,
+) -> Result<HttpResponse, actix_web::Error> {
+    // Only admins or system processes should be able to update balances
+    // In a real system, this would have stricter authorization
+    let user_id = auth::extract_user_id(&req)?;
+
+    // Verify wallet ownership
     let mut conn = pool
         .get()
         .map_err(|_| actix_web::error::ErrorInternalServerError("Database connection error"))?;
-    
-    let wallets = web::block(move || {
+
+    let wallet_id = balance_req.wallet_id;
+    let wallet = web::block(move || {
         wallets::table
+            .filter(wallets::wallet_id.eq(wallet_id))
             .filter(wallets::user_id.eq(user_id))
-            .load::<Wallet>(&mut conn)
+            .first::<Wallet>(&mut conn)
+            .optional()
     })
     .await
     .map_err(|e| {
-        log::error!("Failed to list wallets: {:?}", e);
-        actix_web::error::ErrorInternalServerError("Failed to list wallets")
-    })?
-    .map_err(|e| {
-        log::error!("Database error: {:?}", e);
-        actix_web::error::ErrorInternalServerError("Failed to list wallets")
+        error!("Database error: {:?}", e);
+        actix_web::error::ErrorInternalServerError("Failed to verify wallet")
     })?;
-    
-    // Convert wallets to response DTOs
-    let wallet_responses: Vec<WalletResponse> = wallets
-        .into_iter()
-        .map(WalletResponse::from)
-        .collect();
-    
-    Ok(HttpResponse::Ok().json(serde_json::json!({
-        "wallets": wallet_responses
-    })))
+
+    let wallet = match wallet {
+        Ok(Some(w)) => w,
+        Ok(None) => {
+            return Ok(HttpResponse::NotFound().json(serde_json::json!({
+                "error": "Wallet not found or you don't have permission to access it"
+            })));
+        }
+        Err(_) => {
+            return Ok(HttpResponse::InternalServerError().json(serde_json::json!({
+                "error": "Database error when verifying wallet"
+            })));
+        }
+    };
+
+    // Validate cryptocurrency and amount
+    let cryptocurrency = balance_req.cryptocurrency.to_uppercase();
+    if !["BTC", "ETH", "BTC_TESTNET", "ETH_TESTNET"].contains(&cryptocurrency.as_str()) {
+        return Ok(HttpResponse::BadRequest().json(serde_json::json!({
+            "error": "Invalid cryptocurrency. Supported values: BTC, ETH, BTC_TESTNET, ETH_TESTNET."
+        })));
+    }
+
+    let amount = match BigDecimal::from_str(&balance_req.amount) {
+        Ok(a) => a,
+        Err(_) => {
+            return Ok(HttpResponse::BadRequest().json(serde_json::json!({
+                "error": "Invalid amount format. Must be a valid decimal number."
+            })));
+        }
+    };
+
+    // Update the balance
+    let mut conn = pool
+        .get()
+        .map_err(|_| actix_web::error::ErrorInternalServerError("Database connection error"))?;
+
+    let wallet_id_inner = wallet_id;
+    let cryptocurrency_inner = cryptocurrency.clone();
+    let operation = balance_req.operation.to_uppercase();
+    let operation_clone = operation.clone(); // Clone it before moving into closure
+
+    let result = web::block(move || -> Result<WalletBalance, diesel::result::Error> {
+        conn.transaction(|conn| {
+            // Get current balance
+            let current_balance = wallet_balances::table
+                .filter(wallet_balances::wallet_id.eq(wallet_id_inner))
+                .filter(wallet_balances::cryptocurrency.eq(&cryptocurrency_inner))
+                .first::<WalletBalance>(conn)
+                .optional()?;
+
+            match current_balance {
+                Some(balance) => {
+                    // Calculate new balance based on operation
+                    let new_balance = match operation_clone.as_str() {
+                        // Use the clone here
+                        "ADD" => balance.balance.clone() + amount.clone(),
+                        "SUBTRACT" => {
+                            let result = balance.balance.clone() - amount.clone();
+                            if result < BigDecimal::from(0) {
+                                return Err(diesel::result::Error::RollbackTransaction);
+                            }
+                            result
+                        }
+                        "SET" => amount.clone(),
+                        _ => return Err(diesel::result::Error::RollbackTransaction),
+                    };
+
+                    // Update the balance
+                    diesel::update(wallet_balances::table)
+                        .filter(wallet_balances::id.eq(balance.id))
+                        .set((
+                            wallet_balances::balance.eq(new_balance),
+                            wallet_balances::last_updated.eq(diesel::dsl::now),
+                        ))
+                        .get_result::<WalletBalance>(conn)
+                }
+                None => {
+                    // Create a new balance record
+                    if operation_clone == "SUBTRACT" {
+                        // Use the clone here too
+                        // Can't subtract from non-existent balance
+                        return Err(diesel::result::Error::RollbackTransaction);
+                    }
+
+                    let new_balance = if operation_clone == "ADD" {
+                        // And here
+                        amount.clone()
+                    } else {
+                        // SET
+                        amount.clone()
+                    };
+
+                    let new_balance_record = NewWalletBalance {
+                        wallet_id: wallet_id_inner,
+                        cryptocurrency: cryptocurrency_inner.clone(),
+                        balance: new_balance,
+                    };
+
+                    diesel::insert_into(wallet_balances::table)
+                        .values(&new_balance_record)
+                        .get_result::<WalletBalance>(conn)
+                }
+            }
+        })
+    })
+    .await
+    .map_err(|e| {
+        error!("Failed to update balance: {:?}", e);
+        actix_web::error::ErrorInternalServerError("Failed to update balance")
+    })?;
+
+    match result {
+        Ok(updated_balance) => Ok(HttpResponse::Ok().json(serde_json::json!({
+            "message": "Balance updated successfully",
+            "balance": {
+                "cryptocurrency": updated_balance.cryptocurrency,
+                "balance": updated_balance.balance.to_string(),
+                "last_updated": updated_balance.last_updated
+            }
+        }))),
+        Err(_) => {
+            if operation == "SUBTRACT" {
+                Ok(HttpResponse::BadRequest().json(serde_json::json!({
+                    "error": "Insufficient balance for subtraction"
+                })))
+            } else {
+                Ok(HttpResponse::InternalServerError().json(serde_json::json!({
+                    "error": "Failed to update balance"
+                })))
+            }
+        }
+    }
+}
+
+#[derive(Deserialize)]
+pub struct UpdateBalanceRequest {
+    pub wallet_id: i64,
+    pub cryptocurrency: String,
+    pub amount: String,
+    pub operation: String, // "ADD", "SUBTRACT", or "SET"
 }
 
 // Register these functions in your main.rs app service
@@ -338,6 +619,9 @@ pub fn configure_routes(cfg: &mut web::ServiceConfig) {
     cfg.service(
         web::scope("/wallet")
             .service(create_wallet)
+            .service(get_wallet)
             .service(list_wallets)
+            .service(generate_address)
+            .service(update_balance),
     );
 }

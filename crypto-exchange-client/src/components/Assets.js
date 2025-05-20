@@ -11,16 +11,20 @@ function Assets() {
 
     // Wallet creation state
     const [showWalletCreation, setShowWalletCreation] = useState(false);
-    const [selectedWalletType, setSelectedWalletType] = useState(null);
-    const [selectedNetwork, setSelectedNetwork] = useState(null);
+    const [walletName, setWalletName] = useState('My Custodial Wallet');
     const [walletCreated, setWalletCreated] = useState(false);
     const [isCreatingWallet, setIsCreatingWallet] = useState(false);
     const [walletData, setWalletData] = useState(null);
     const [walletCreationError, setWalletCreationError] = useState('');
-    
+
     // User wallets state
     const [userWallets, setUserWallets] = useState([]);
     const [isLoadingWallets, setIsLoadingWallets] = useState(true);
+
+    // Address generation state
+    const [isGeneratingAddress, setIsGeneratingAddress] = useState(false);
+    const [addressGenerationStatus, setAddressGenerationStatus] = useState(null);
+    const [activeWalletId, setActiveWalletId] = useState(null);
 
     // Enhanced function to get proper display name from user data
     const getDisplayName = (user) => {
@@ -60,19 +64,19 @@ function Assets() {
         navigate('/admin');
     };
 
-    // Function to handle wallet creation
+    // Function to handle wallet creation (updated for multi-chain custodial wallets)
     const handleCreateWallet = async () => {
-        if (!selectedWalletType || !selectedNetwork) {
-            setWalletCreationError('Please select both wallet type and network');
+        if (!walletName.trim()) {
+            setWalletCreationError('Please enter a wallet name');
             return;
         }
 
         setWalletCreationError('');
         setIsCreatingWallet(true);
-        
+
         try {
             const token = localStorage.getItem('auth_token');
-            
+
             const response = await fetch('http://localhost:8080/wallet/create', {
                 method: 'POST',
                 headers: {
@@ -80,24 +84,24 @@ function Assets() {
                     'Content-Type': 'application/json',
                 },
                 body: JSON.stringify({
-                    wallet_type: selectedWalletType.toUpperCase(),
-                    network: selectedNetwork.toUpperCase(),
+                    wallet_type: 'CUSTODIAL',
+                    name: walletName
                 }),
             });
-            
+
             const data = await response.json();
-            
+
             if (!response.ok) {
                 throw new Error(data.error || 'Failed to create wallet');
             }
-            
+
             // Success - store wallet data and show confirmation
             setWalletData(data.wallet);
             setWalletCreated(true);
-            
+
             // Add the new wallet to the list
             setUserWallets(prevWallets => [...prevWallets, data.wallet]);
-            
+
         } catch (error) {
             console.error('Error creating wallet:', error);
             setWalletCreationError(error.message || 'Failed to create wallet. Please try again.');
@@ -105,29 +109,105 @@ function Assets() {
             setIsCreatingWallet(false);
         }
     };
-    
+
+    // Function to generate cryptocurrency address for a wallet
+    const generateAddress = async (walletId, cryptocurrency) => {
+        setActiveWalletId(walletId);
+        try {
+            setIsGeneratingAddress(true);
+            
+            const token = localStorage.getItem('auth_token');
+            const response = await fetch('http://localhost:8080/wallet/address/generate', {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    wallet_id: walletId,
+                    cryptocurrency: cryptocurrency
+                }),
+            });
+            
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.error || 'Failed to generate address');
+            }
+            
+            const data = await response.json();
+            
+            // Refresh wallet list with fresh data - most important part
+            await fetchUserWallets(token);
+            
+            // Update generation status
+            setAddressGenerationStatus({
+                success: true,
+                message: `${cryptocurrency} address generated successfully!`,
+                address: data.address.address,
+                walletId: walletId
+            });
+        } catch (error) {
+            console.error('Error generating address:', error);
+            setAddressGenerationStatus({
+                success: false,
+                message: error.message || 'Failed to generate address',
+                walletId: walletId
+            });
+        } finally {
+            setIsGeneratingAddress(false);
+        }
+    };
+
     // Function to fetch user wallets
     const fetchUserWallets = async (token) => {
         try {
             setIsLoadingWallets(true);
+            console.log("Fetching wallets with token:", token);
             
             const response = await fetch('http://localhost:8080/wallet/list', {
                 method: 'GET',
                 headers: {
                     'Authorization': `Bearer ${token}`,
                     'Content-Type': 'application/json',
+                    'Accept': 'application/json' // Add explicit Accept header
                 },
             });
             
+            console.log("Response status:", response.status);
+            
             if (response.ok) {
-                const data = await response.json();
-                setUserWallets(data.wallets || []);
+                const text = await response.text();
+                console.log('Raw wallet response:', text);
+                
+                // Only try to parse if it looks like valid JSON
+                if (text && text.trim()) {
+                    try {
+                        const data = JSON.parse(text);
+                        console.log('Parsed wallet data:', data);
+                        
+                        if (data.wallets && Array.isArray(data.wallets)) {
+                            setUserWallets(data.wallets);
+                        } else {
+                            console.warn("Unexpected wallet data format:", data);
+                            setUserWallets([]);
+                        }
+                    } catch (parseError) {
+                        console.error('Error parsing wallet data:', parseError);
+                        setUserWallets([]);
+                        setApiError('Failed to parse wallet data. Please try again later.');
+                    }
+                } else {
+                    console.warn("Empty response from wallet list endpoint");
+                    setUserWallets([]);
+                }
             } else {
-                console.warn("Could not fetch wallets");
+                console.error(`Could not fetch wallets. Status: ${response.status}`);
+                setApiError('Failed to load your wallets. Please try again later.');
                 setUserWallets([]);
             }
         } catch (error) {
             console.error('Error fetching wallets:', error);
+            setApiError('Network error when fetching wallets. Please check your connection.');
             setUserWallets([]);
         } finally {
             setIsLoadingWallets(false);
@@ -189,7 +269,7 @@ function Assets() {
                 } catch (userApiError) {
                     console.warn("API error when fetching user data:", userApiError);
                 }
-                
+
                 // Fetch user wallets
                 await fetchUserWallets(token);
 
@@ -210,7 +290,7 @@ function Assets() {
         if (isLoadingWallets) {
             return <div className="wallet-loading">Loading your wallets...</div>;
         }
-        
+
         if (userWallets.length === 0) {
             return (
                 <div className="no-wallet-message">
@@ -225,62 +305,130 @@ function Assets() {
                 </div>
             );
         }
-        
+
         return (
             <div className="wallets-container">
                 <div className="wallets-header">
                     <h3>Your Wallets</h3>
-                    <button 
-                        className="wallet-button primary" 
+                    <button
+                        className="wallet-button primary"
                         onClick={() => setShowWalletCreation(true)}
                     >
                         Create New Wallet
                     </button>
                 </div>
-                
+
                 <div className="wallet-cards">
-                    {userWallets.map((wallet) => (
-                        <div key={wallet.wallet_id} className="wallet-card">
-                            <div className="wallet-card-header">
-                                <div className="wallet-info">
-                                    <span className={`wallet-type ${wallet.wallet_type.toLowerCase()}`}>
-                                        {wallet.wallet_type === "CUSTODIAL" ? "Custodial" : "Non-Custodial"}
-                                    </span>
-                                    <span className="wallet-network">{wallet.network}</span>
-                                </div>
-                                <div className="wallet-status">
-                                    <span className={`status-indicator ${wallet.status.toLowerCase()}`}></span>
-                                    {wallet.status}
-                                </div>
-                            </div>
-                            
-                            <div className="wallet-address-container">
-                                <label>Wallet Address:</label>
+                    {userWallets.map((wallet) => renderWallet(wallet))}
+                </div>
+            </div>
+        );
+    };
+
+    // Render wallet with multi-chain support
+    const renderWallet = (wallet) => {
+        const isActiveWallet = wallet.wallet_id === activeWalletId;
+        return (
+            <div id={`wallet-${wallet.wallet_id}`} key={wallet.wallet_id} className="wallet-card">
+                <div className="wallet-card-header">
+                    <div className="wallet-info">
+                        <h3>{wallet.name}</h3>
+                        <span className="wallet-type custodial">
+                            Custodial
+                        </span>
+                    </div>
+                    <div className="wallet-status">
+                        <span className={`status-indicator ${wallet.status.toLowerCase()}`}></span>
+                        {wallet.status}
+                    </div>
+                </div>
+
+                {/* Display addresses for different cryptocurrencies */}
+                {wallet.addresses && wallet.addresses.length > 0 ? (
+                    <div className="wallet-addresses">
+                        {wallet.addresses.map(address => (
+                            <div key={address.cryptocurrency} className="wallet-address-container">
+                                <label>{address.cryptocurrency} Address:</label>
                                 <div className="wallet-address">
-                                    <code>{wallet.address}</code>
-                                    <button 
+                                    <code>{address.address}</code>
+                                    <button
                                         className="copy-button"
-                                        onClick={() => {
-                                            navigator.clipboard.writeText(wallet.address);
-                                            // You could add a copied notification here
-                                        }}
+                                        onClick={() => navigator.clipboard.writeText(address.address)}
                                     >
                                         Copy
                                     </button>
                                 </div>
                             </div>
-                            
-                            <div className="wallet-actions">
-                                <button className="wallet-action-button">Deposit</button>
-                                <button className="wallet-action-button">Withdraw</button>
-                                <button className="wallet-action-button">View Transactions</button>
+                        ))}
+                    </div>
+                ) : (
+                    <div className="no-addresses-message">
+                        No cryptocurrency addresses generated yet.
+                    </div>
+                )}
+
+                {/* Display balances */}
+                {wallet.balances && wallet.balances.length > 0 && (
+                    <div className="wallet-balances">
+                        <h4>Balances</h4>
+                        {wallet.balances.map(balance => (
+                            <div key={balance.cryptocurrency} className="balance-item">
+                                <span className="crypto-name">{balance.cryptocurrency}:</span>
+                                <span className="balance-amount">{balance.balance}</span>
                             </div>
-                            
-                            <div className="wallet-created">
-                                Created: {new Date(wallet.created_at).toLocaleString()}
-                            </div>
+                        ))}
+                    </div>
+                )}
+
+                {/* Generate address buttons */}
+                <div className="generate-address-section">
+                    <h4>Generate New Address</h4>
+                    <div className="generate-buttons">
+                        {['ETH', 'BTC'].map(crypto => {
+                            // Check if address already exists for this crypto
+                            const addressExists = wallet.addresses &&
+                                wallet.addresses.some(a => a.cryptocurrency === crypto);
+
+                            return (
+                                <button
+                                    key={crypto}
+                                    className={`generate-button ${addressExists ? 'disabled' : ''}`}
+                                    disabled={addressExists || isGeneratingAddress}
+                                    onClick={() => generateAddress(wallet.wallet_id, crypto)}
+                                >
+                                    {addressExists ? `${crypto} Address Exists` : `Generate ${crypto} Address`}
+                                </button>
+                            );
+                        })}
+                    </div>
+
+                    {/* Display the address generation status */}
+                    {addressGenerationStatus && isActiveWallet && (
+                        <div className={`address-generation-status ${addressGenerationStatus.success ? 'success' : 'error'}`}>
+                            <p>{addressGenerationStatus.message}</p>
+                            {addressGenerationStatus.success && addressGenerationStatus.address && (
+                                <div className="generated-address">
+                                    {addressGenerationStatus.address}
+                                    <button
+                                        className="copy-address-btn"
+                                        onClick={() => navigator.clipboard.writeText(addressGenerationStatus.address)}
+                                    >
+                                        Copy
+                                    </button>
+                                </div>
+                            )}
                         </div>
-                    ))}
+                    )}
+                </div>
+
+                <div className="wallet-actions">
+                    <button className="wallet-action-button">Deposit</button>
+                    <button className="wallet-action-button">Withdraw</button>
+                    <button className="wallet-action-button">View Transactions</button>
+                </div>
+
+                <div className="wallet-created">
+                    Created: {new Date(wallet.created_at).toLocaleString()}
                 </div>
             </div>
         );
@@ -371,66 +519,34 @@ function Assets() {
                 <main className="main-content">
                     {showWalletCreation && !walletCreated && (
                         <div className="wallet-selection-container">
-                            <h2>Create a New Wallet</h2>
-                            <p className="wallet-intro">Configure your new cryptocurrency wallet below.</p>
+                            <h2>Create a Multi-Chain Custodial Wallet</h2>
+                            <p className="wallet-intro">
+                                Create a secure custodial wallet to manage multiple cryptocurrencies. We'll securely manage your private keys.
+                            </p>
 
-                            <div className="wallet-options">
-                                <div
-                                    className={`wallet-option ${selectedWalletType === 'custodial' ? 'selected' : ''}`}
-                                    onClick={() => setSelectedWalletType('custodial')}
-                                >
-                                    <div className="wallet-icon custodial-icon">🔒</div>
-                                    <h3>Custodial Wallet</h3>
-                                    <p>We securely manage your private keys for you.</p>
-                                    <ul>
+                            <div className="custodial-wallet-info">
+                                <div className="custodial-icon">🔒</div>
+                                <div className="custodial-details">
+                                    <h3>Custodial Wallet Features</h3>
+                                    <ul className="custodial-features">
+                                        <li>One wallet for multiple cryptocurrencies (ETH, BTC)</li>
+                                        <li>Generate blockchain-specific addresses as needed</li>
+                                        <li>We securely manage your private keys for you</li>
                                         <li>Password recovery available</li>
-                                        <li>No need to worry about lost keys</li>
-                                        <li>Perfect for beginners</li>
-                                        <li>CryptoX manages security</li>
-                                    </ul>
-                                </div>
-
-                                <div
-                                    className={`wallet-option ${selectedWalletType === 'non_custodial' ? 'selected' : ''}`}
-                                    onClick={() => setSelectedWalletType('non_custodial')}
-                                >
-                                    <div className="wallet-icon non-custodial-icon">🔐</div>
-                                    <h3>Non-Custodial Wallet</h3>
-                                    <p>You maintain full control of your private keys.</p>
-                                    <ul>
-                                        <li>Complete ownership of your assets</li>
-                                        <li>Enhanced security against third parties</li>
-                                        <li>Ideal for experienced users</li>
-                                        <li>You are responsible for key security</li>
+                                        <li>Perfect for beginners and advanced users</li>
                                     </ul>
                                 </div>
                             </div>
-                            
-                            <div className="network-selection">
-                                <h3>Select Network</h3>
-                                <div className="network-options">
-                                    <div 
-                                        className={`network-option ${selectedNetwork === 'ethereum' ? 'selected' : ''}`}
-                                        onClick={() => setSelectedNetwork('ethereum')}
-                                    >
-                                        <div className="network-icon">Ξ</div>
-                                        <div className="network-details">
-                                            <h4>Ethereum Mainnet</h4>
-                                            <p>The primary Ethereum blockchain network</p>
-                                        </div>
-                                    </div>
-                                    
-                                    <div 
-                                        className={`network-option ${selectedNetwork === 'ethereum_testnet' ? 'selected' : ''}`}
-                                        onClick={() => setSelectedNetwork('ethereum_testnet')}
-                                    >
-                                        <div className="network-icon">Ξ-T</div>
-                                        <div className="network-details">
-                                            <h4>Ethereum Testnet</h4>
-                                            <p>For testing with no real value transactions</p>
-                                        </div>
-                                    </div>
-                                </div>
+
+                            <div className="wallet-name-input">
+                                <label htmlFor="walletName">Wallet Name</label>
+                                <input
+                                    type="text"
+                                    id="walletName"
+                                    value={walletName}
+                                    onChange={(e) => setWalletName(e.target.value)}
+                                    placeholder="Enter a name for your wallet"
+                                />
                             </div>
 
                             {walletCreationError && (
@@ -452,14 +568,13 @@ function Assets() {
                                 </button>
                                 <button
                                     className="wallet-button primary"
-                                    disabled={!selectedWalletType || !selectedNetwork || isCreatingWallet}
+                                    disabled={!walletName.trim() || isCreatingWallet}
                                     onClick={handleCreateWallet}
                                 >
                                     {isCreatingWallet ? (
                                         <span className="loading-spinner">Creating...</span>
                                     ) : (
-                                        `Create ${selectedWalletType ? 
-                                            (selectedWalletType === 'custodial' ? 'Custodial' : 'Non-Custodial') : ''} Wallet`
+                                        "Create Custodial Wallet"
                                     )}
                                 </button>
                             </div>
@@ -469,32 +584,24 @@ function Assets() {
                     {walletCreated && walletData && (
                         <div className="wallet-confirmation">
                             <div className="success-icon">✓</div>
-                            <h2>Your Wallet Has Been Created!</h2>
+                            <h2>Multi-Chain Wallet Created Successfully!</h2>
                             <p>
-                                {selectedWalletType === 'custodial'
-                                    ? 'Your wallet is now ready to use. We\'ll manage the security for you.'
-                                    : 'Your wallet is now ready to use. Remember to securely store your private keys and seed phrase.'}
+                                Your custodial wallet is now ready to use. We'll securely manage your private keys.
+                                You can now generate addresses for different cryptocurrencies.
                             </p>
-                            <div className="wallet-address-box">
-                                <p className="wallet-address-label">Your wallet address:</p>
-                                <div className="wallet-address-value-container">
-                                    <code className="wallet-address-value">{walletData.address}</code>
-                                    <button 
-                                        className="copy-address-button"
-                                        onClick={() => navigator.clipboard.writeText(walletData.address)}
-                                    >
-                                        Copy
-                                    </button>
+
+                            <div className="wallet-details multi-chain">
+                                <div className="wallet-detail">
+                                    <span>Wallet ID:</span>
+                                    <strong>{walletData.wallet_id}</strong>
                                 </div>
-                            </div>
-                            <div className="wallet-details">
+                                <div className="wallet-detail">
+                                    <span>Name:</span>
+                                    <strong>{walletData.name}</strong>
+                                </div>
                                 <div className="wallet-detail">
                                     <span>Type:</span>
-                                    <strong>{walletData.wallet_type}</strong>
-                                </div>
-                                <div className="wallet-detail">
-                                    <span>Network:</span>
-                                    <strong>{walletData.network}</strong>
+                                    <strong>Custodial</strong>
                                 </div>
                                 <div className="wallet-detail">
                                     <span>Status:</span>
@@ -504,14 +611,136 @@ function Assets() {
                                     <span>Created:</span>
                                     <strong>{new Date(walletData.created_at).toLocaleString()}</strong>
                                 </div>
+                                <div className="wallet-detail full-width">
+                                    <span>Supported Cryptocurrencies:</span>
+                                    <strong>ETH, BTC</strong>
+                                </div>
                             </div>
-                            
+
+                            <div className="next-steps">
+                                <h4>Next Steps</h4>
+                                <p>Generate blockchain-specific addresses to start using your wallet:</p>
+                                <div className="next-steps-actions">
+                                    <button
+                                        className="next-step-button"
+                                        onClick={async (event) => {
+                                            // Define variables outside try/catch for scope access
+                                            const btnElement = event.target;
+                                            const originalText = btnElement.textContent;
+
+                                            try {
+                                                // Show loading state
+                                                btnElement.textContent = "Generating...";
+                                                btnElement.disabled = true;
+
+                                                // Generate ETH address
+                                                await generateAddress(walletData.wallet_id, "ETH");
+
+                                                // Don't change view - stay on the confirmation page
+                                                // setShowWalletCreation(false); - REMOVED
+                                                // setWalletCreated(false); - REMOVED
+
+                                                // Update button to show address exists
+                                                btnElement.textContent = "ETH Address Generated";
+                                                btnElement.disabled = true;
+                                                btnElement.classList.add("address-generated");
+                                            } catch (error) {
+                                                // Handle errors
+                                                console.error("Failed to generate ETH address:", error);
+                                                setAddressGenerationStatus({
+                                                    success: false,
+                                                    message: "Failed to generate ETH address. Please try again.",
+                                                    walletId: walletData.wallet_id
+                                                });
+
+                                                // Reset button state
+                                                btnElement.textContent = originalText;
+                                                btnElement.disabled = false;
+                                            }
+                                        }}
+                                    >
+                                        Generate ETH Address
+                                    </button>
+                                    <button
+                                        className="next-step-button"
+                                        onClick={async (event) => {
+                                            // Define variables outside try/catch for scope access
+                                            const btnElement = event.target;
+                                            const originalText = btnElement.textContent;
+
+                                            try {
+                                                // Show loading state
+                                                btnElement.textContent = "Generating...";
+                                                btnElement.disabled = true;
+
+                                                // Generate BTC address
+                                                await generateAddress(walletData.wallet_id, "BTC");
+
+                                                // Don't change view - stay on the confirmation page
+                                                // setShowWalletCreation(false); - REMOVED
+                                                // setWalletCreated(false); - REMOVED
+
+                                                // Update button to show address exists
+                                                btnElement.textContent = "BTC Address Generated";
+                                                btnElement.disabled = true;
+                                                btnElement.classList.add("address-generated");
+                                            } catch (error) {
+                                                // Handle errors
+                                                console.error("Failed to generate BTC address:", error);
+                                                setAddressGenerationStatus({
+                                                    success: false,
+                                                    message: "Failed to generate BTC address. Please try again.",
+                                                    walletId: walletData.wallet_id
+                                                });
+
+                                                // Reset button state
+                                                btnElement.textContent = originalText;
+                                                btnElement.disabled = false;
+                                            }
+                                        }}
+                                    >
+                                        Generate BTC Address
+                                    </button>
+                                </div>
+                            </div>
+
                             <div className="wallet-confirmation-actions">
                                 <button
                                     className="wallet-button primary"
-                                    onClick={() => {
-                                        setShowWalletCreation(false);
-                                        setWalletCreated(false);
+                                    onClick={async () => {
+                                        try {
+                                            // Refresh wallet data first
+                                            const token = localStorage.getItem('auth_token');
+                                            await fetch('http://localhost:8080/wallet/list', {
+                                                method: 'GET',
+                                                headers: {
+                                                    'Authorization': `Bearer ${token}`,
+                                                    'Content-Type': 'application/json',
+                                                },
+                                            }).then(response => {
+                                                if (response.ok) {
+                                                    return response.json();
+                                                }
+                                                throw new Error('Failed to refresh wallet data');
+                                            }).then(data => {
+                                                // Update user wallets with fresh data
+                                                setUserWallets(data.wallets || []);
+                                            });
+                                            
+                                            // Then update state to show wallet list
+                                            setShowWalletCreation(false);
+                                            setWalletCreated(false);
+                                            setWalletData(null);
+                                            
+                                            // Scroll to top
+                                            window.scrollTo({
+                                                top: 0,
+                                                behavior: 'smooth'
+                                            });
+                                        } catch (error) {
+                                            console.error('Error refreshing wallet data:', error);
+                                            setApiError('Failed to load wallet data. Please try again.');
+                                        }
                                     }}
                                 >
                                     View My Wallets
@@ -520,13 +749,29 @@ function Assets() {
                                     className="wallet-button secondary"
                                     onClick={() => {
                                         setWalletCreated(false);
-                                        setSelectedWalletType(null);
-                                        setSelectedNetwork(null);
+                                        setWalletName('My Custodial Wallet');
                                     }}
                                 >
                                     Create Another Wallet
                                 </button>
                             </div>
+
+                            {addressGenerationStatus && addressGenerationStatus.walletId === walletData.wallet_id && (
+                                <div className={`address-generation-status ${addressGenerationStatus.success ? 'success' : 'error'}`}>
+                                    <p>{addressGenerationStatus.message}</p>
+                                    {addressGenerationStatus.success && addressGenerationStatus.address && (
+                                        <div className="generated-address">
+                                            {addressGenerationStatus.address}
+                                            <button
+                                                className="copy-address-btn"
+                                                onClick={() => navigator.clipboard.writeText(addressGenerationStatus.address)}
+                                            >
+                                                Copy
+                                            </button>
+                                        </div>
+                                    )}
+                                </div>
+                            )}
                         </div>
                     )}
 

@@ -1,5 +1,6 @@
 use diesel::prelude::*;
 use serde::{Deserialize, Serialize};
+use bigdecimal::BigDecimal;
 
 #[derive(Queryable, Selectable, Debug, Clone, Serialize)]
 #[diesel(table_name = crate::schema::users)]
@@ -215,18 +216,10 @@ pub struct Wallet {
     pub wallet_id: i64,
     pub user_id: i32,
     pub wallet_type: String,
-    pub address: String,
-    pub public_key: String,
-    pub encrypted_private_key: String,
-    pub encryption_iv: String,
-    pub encryption_auth_tag: String,
-    pub seed_phrase_encrypted: Option<String>,
-    pub seed_phrase_iv: Option<String>,
-    pub seed_phrase_auth_tag: Option<String>,
     pub created_at: chrono::NaiveDateTime,
     pub updated_at: chrono::NaiveDateTime,
-    pub network: String,
     pub status: String,
+    pub name: String,
 }
 
 // For inserting new wallets
@@ -235,14 +228,83 @@ pub struct Wallet {
 pub struct NewWallet {
     pub user_id: i32,
     pub wallet_type: String,
-    pub address: String,
-    pub public_key: String,
-    pub encrypted_private_key: String,
-    pub encryption_iv: String,
-    pub encryption_auth_tag: String,
-    pub seed_phrase_encrypted: Option<String>,
-    pub seed_phrase_iv: Option<String>,
-    pub seed_phrase_auth_tag: Option<String>,
-    pub network: String,
     pub status: String,
+    pub name: String,
+}
+
+// New models for wallet addresses
+#[derive(Queryable, Serialize, Debug)]
+pub struct WalletAddress {
+    pub id: i32,
+    pub wallet_id: i64,
+    pub cryptocurrency: String,
+    pub address: String,
+    pub created_at: chrono::NaiveDateTime,
+}
+
+#[derive(Insertable, Debug)]
+#[diesel(table_name = crate::schema::wallet_addresses)]
+pub struct NewWalletAddress {
+    pub wallet_id: i64,
+    pub cryptocurrency: String,
+    pub address: String,
+}
+
+// Models for wallet balances
+#[derive(Queryable, Serialize, Debug)]
+pub struct WalletBalance {
+    pub id: i32,
+    pub wallet_id: i64,
+    pub cryptocurrency: String,
+    pub balance: BigDecimal,
+    pub last_updated: chrono::NaiveDateTime,
+}
+
+#[derive(Insertable, Debug)]
+#[diesel(table_name = crate::schema::wallet_balances)]
+pub struct NewWalletBalance {
+    pub wallet_id: i64,
+    pub cryptocurrency: String,
+    pub balance: BigDecimal,
+}
+
+// Wallet response DTO with cryptocurrency addresses and balances
+#[derive(Serialize)]
+pub struct WalletResponseWithAddresses {
+    pub wallet_id: i64,
+    pub user_id: i32,
+    pub wallet_type: String,
+    pub name: String,
+    pub status: String,
+    pub created_at: chrono::NaiveDateTime,
+    pub addresses: Vec<WalletAddressResponse>,
+    pub balances: Vec<WalletBalanceResponse>,
+}
+
+#[derive(Serialize)]
+pub struct WalletAddressResponse {
+    pub cryptocurrency: String,
+    pub address: String,
+    pub created_at: chrono::NaiveDateTime,
+}
+
+#[derive(Serialize)]
+pub struct WalletBalanceResponse {
+    pub cryptocurrency: String,
+    pub balance: String,
+    pub last_updated: chrono::NaiveDateTime,
+}
+
+// Request model for creating a new wallet
+#[derive(Deserialize)]
+pub struct CreateWalletRequest {
+    pub wallet_type: String,
+    pub name: Option<String>,
+}
+
+// Request model for generating a cryptocurrency address
+#[derive(Deserialize)]
+pub struct GenerateAddressRequest {
+    pub wallet_id: i64,
+    pub cryptocurrency: String,
 }
