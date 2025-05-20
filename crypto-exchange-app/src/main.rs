@@ -26,6 +26,7 @@ pub mod email;
 pub mod markets;
 pub mod models;
 pub mod schema; // Add the markets module
+pub mod wallets; // Add this line
 
 use argon2::{
     Argon2,
@@ -1403,6 +1404,7 @@ async fn main() -> std::io::Result<()> {
                     .service(admin_update_user), // Remove the password reset endpoint from here
             )
             .service(markets::get_markets) // Add the markets endpoint
+            .configure(wallets::configure_routes) // Add wallet routes
     })
     .bind(format!("{}:{}", host, port))?
     .run()

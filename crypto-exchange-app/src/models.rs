@@ -208,3 +208,41 @@ pub struct ResetPasswordRequest {
     pub token: String,
     pub new_password: String,
 }
+
+// Wallet model matching the database schema
+#[derive(Queryable, Serialize, Debug)]
+pub struct Wallet {
+    pub wallet_id: i64,
+    pub user_id: i32,
+    pub wallet_type: String,
+    pub address: String,
+    pub public_key: String,
+    pub encrypted_private_key: String,
+    pub encryption_iv: String,
+    pub encryption_auth_tag: String,
+    pub seed_phrase_encrypted: Option<String>,
+    pub seed_phrase_iv: Option<String>,
+    pub seed_phrase_auth_tag: Option<String>,
+    pub created_at: chrono::NaiveDateTime,
+    pub updated_at: chrono::NaiveDateTime,
+    pub network: String,
+    pub status: String,
+}
+
+// For inserting new wallets
+#[derive(Insertable, Debug)]
+#[diesel(table_name = crate::schema::wallets)]
+pub struct NewWallet {
+    pub user_id: i32,
+    pub wallet_type: String,
+    pub address: String,
+    pub public_key: String,
+    pub encrypted_private_key: String,
+    pub encryption_iv: String,
+    pub encryption_auth_tag: String,
+    pub seed_phrase_encrypted: Option<String>,
+    pub seed_phrase_iv: Option<String>,
+    pub seed_phrase_auth_tag: Option<String>,
+    pub network: String,
+    pub status: String,
+}

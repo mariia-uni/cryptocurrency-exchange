@@ -62,11 +62,42 @@ diesel::table! {
     }
 }
 
+diesel::table! {
+    wallets (wallet_id) {
+        wallet_id -> Int8,
+        user_id -> Int4,
+        #[max_length = 15]
+        wallet_type -> Varchar,
+        #[max_length = 42]
+        address -> Varchar,
+        #[max_length = 130]
+        public_key -> Varchar,
+        encrypted_private_key -> Text,
+        #[max_length = 32]
+        encryption_iv -> Varchar,
+        #[max_length = 32]
+        encryption_auth_tag -> Varchar,
+        seed_phrase_encrypted -> Nullable<Text>,
+        #[max_length = 32]
+        seed_phrase_iv -> Nullable<Varchar>,
+        #[max_length = 32]
+        seed_phrase_auth_tag -> Nullable<Varchar>,
+        created_at -> Timestamp,
+        updated_at -> Timestamp,
+        #[max_length = 50]
+        network -> Varchar,
+        #[max_length = 10]
+        status -> Varchar,
+    }
+}
+
 diesel::joinable!(password_reset_tokens -> users (user_id));
 diesel::joinable!(user_verifications -> users (user_id));
+diesel::joinable!(wallets -> users (user_id));
 
 diesel::allow_tables_to_appear_in_same_query!(
     password_reset_tokens,
     user_verifications,
     users,
+    wallets,
 );

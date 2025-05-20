@@ -9,10 +9,18 @@ function Assets() {
     const [apiError, setApiError] = useState('');
     const [isAdmin, setIsAdmin] = useState(false);
 
-    // Add state for wallet creation
-    const [showWalletCreation, setShowWalletCreation] = useState(true);
+    // Wallet creation state
+    const [showWalletCreation, setShowWalletCreation] = useState(false);
     const [selectedWalletType, setSelectedWalletType] = useState(null);
+    const [selectedNetwork, setSelectedNetwork] = useState(null);
     const [walletCreated, setWalletCreated] = useState(false);
+    const [isCreatingWallet, setIsCreatingWallet] = useState(false);
+    const [walletData, setWalletData] = useState(null);
+    const [walletCreationError, setWalletCreationError] = useState('');
+    
+    // User wallets state
+    const [userWallets, setUserWallets] = useState([]);
+    const [isLoadingWallets, setIsLoadingWallets] = useState(true);
 
     // Enhanced function to get proper display name from user data
     const getDisplayName = (user) => {
@@ -47,16 +55,82 @@ function Assets() {
         return `User ${user.id ? '#' + user.id : ''}`;
     };
 
-    // Add this function for the admin button
+    // Function to handle admin panel navigation
     const navigateToAdminPanel = () => {
         navigate('/admin');
     };
 
     // Function to handle wallet creation
-    const handleCreateWallet = () => {
-        if (selectedWalletType) {
+    const handleCreateWallet = async () => {
+        if (!selectedWalletType || !selectedNetwork) {
+            setWalletCreationError('Please select both wallet type and network');
+            return;
+        }
+
+        setWalletCreationError('');
+        setIsCreatingWallet(true);
+        
+        try {
+            const token = localStorage.getItem('auth_token');
+            
+            const response = await fetch('http://localhost:8080/wallet/create', {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    wallet_type: selectedWalletType.toUpperCase(),
+                    network: selectedNetwork.toUpperCase(),
+                }),
+            });
+            
+            const data = await response.json();
+            
+            if (!response.ok) {
+                throw new Error(data.error || 'Failed to create wallet');
+            }
+            
+            // Success - store wallet data and show confirmation
+            setWalletData(data.wallet);
             setWalletCreated(true);
-            setShowWalletCreation(false);
+            
+            // Add the new wallet to the list
+            setUserWallets(prevWallets => [...prevWallets, data.wallet]);
+            
+        } catch (error) {
+            console.error('Error creating wallet:', error);
+            setWalletCreationError(error.message || 'Failed to create wallet. Please try again.');
+        } finally {
+            setIsCreatingWallet(false);
+        }
+    };
+    
+    // Function to fetch user wallets
+    const fetchUserWallets = async (token) => {
+        try {
+            setIsLoadingWallets(true);
+            
+            const response = await fetch('http://localhost:8080/wallet/list', {
+                method: 'GET',
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json',
+                },
+            });
+            
+            if (response.ok) {
+                const data = await response.json();
+                setUserWallets(data.wallets || []);
+            } else {
+                console.warn("Could not fetch wallets");
+                setUserWallets([]);
+            }
+        } catch (error) {
+            console.error('Error fetching wallets:', error);
+            setUserWallets([]);
+        } finally {
+            setIsLoadingWallets(false);
         }
     };
 
@@ -71,13 +145,11 @@ function Assets() {
                     return;
                 }
 
-                // First try to parse the token to get basic user info (fallback method)
+                // Try to parse the token for basic info (fallback)
                 try {
-                    // JWT tokens are in format: header.payload.signature
                     const tokenParts = token.split('.');
                     if (tokenParts.length === 3) {
-                        const payload = JSON.parse(atob(tokenParts[1])); // Decode base64
-                        // Extract user info from token if available
+                        const payload = JSON.parse(atob(tokenParts[1]));
                         const fallbackUserData = {
                             email: payload.email || payload.sub || "User",
                             user_id: payload.user_id || payload.sub,
@@ -91,7 +163,7 @@ function Assets() {
                     console.warn("Could not parse token for fallback user data:", tokenError);
                 }
 
-                // Try fetching user data from API
+                // Fetch user data from API
                 try {
                     const userResponse = await fetch('http://localhost:8080/user/profile', {
                         method: 'GET',
@@ -106,21 +178,20 @@ function Assets() {
                         const apiUserData = userDataResponse.user || userDataResponse;
                         setUserData(apiUserData);
 
-                        // Check and set admin status
                         if (apiUserData && apiUserData.is_admin) {
                             setIsAdmin(true);
                         }
-                    } else {
-                        // Handle 401 specifically
-                        if (userResponse.status === 401) {
-                            localStorage.removeItem('auth_token');
-                            navigate('/login');
-                            return;
-                        }
+                    } else if (userResponse.status === 401) {
+                        localStorage.removeItem('auth_token');
+                        navigate('/login');
+                        return;
                     }
                 } catch (userApiError) {
                     console.warn("API error when fetching user data:", userApiError);
                 }
+                
+                // Fetch user wallets
+                await fetchUserWallets(token);
 
             } catch (error) {
                 console.error('Error in assets data fetching:', error);
@@ -133,6 +204,87 @@ function Assets() {
         fetchUserData();
         return () => { };
     }, [navigate]);
+
+    // Render the wallet list
+    const renderWalletList = () => {
+        if (isLoadingWallets) {
+            return <div className="wallet-loading">Loading your wallets...</div>;
+        }
+        
+        if (userWallets.length === 0) {
+            return (
+                <div className="no-wallet-message">
+                    <h3>No Wallets Found</h3>
+                    <p>You don't have any wallets yet. Create one to start managing your cryptocurrency assets.</p>
+                    <button
+                        className="wallet-button primary"
+                        onClick={() => setShowWalletCreation(true)}
+                    >
+                        Create Wallet
+                    </button>
+                </div>
+            );
+        }
+        
+        return (
+            <div className="wallets-container">
+                <div className="wallets-header">
+                    <h3>Your Wallets</h3>
+                    <button 
+                        className="wallet-button primary" 
+                        onClick={() => setShowWalletCreation(true)}
+                    >
+                        Create New Wallet
+                    </button>
+                </div>
+                
+                <div className="wallet-cards">
+                    {userWallets.map((wallet) => (
+                        <div key={wallet.wallet_id} className="wallet-card">
+                            <div className="wallet-card-header">
+                                <div className="wallet-info">
+                                    <span className={`wallet-type ${wallet.wallet_type.toLowerCase()}`}>
+                                        {wallet.wallet_type === "CUSTODIAL" ? "Custodial" : "Non-Custodial"}
+                                    </span>
+                                    <span className="wallet-network">{wallet.network}</span>
+                                </div>
+                                <div className="wallet-status">
+                                    <span className={`status-indicator ${wallet.status.toLowerCase()}`}></span>
+                                    {wallet.status}
+                                </div>
+                            </div>
+                            
+                            <div className="wallet-address-container">
+                                <label>Wallet Address:</label>
+                                <div className="wallet-address">
+                                    <code>{wallet.address}</code>
+                                    <button 
+                                        className="copy-button"
+                                        onClick={() => {
+                                            navigator.clipboard.writeText(wallet.address);
+                                            // You could add a copied notification here
+                                        }}
+                                    >
+                                        Copy
+                                    </button>
+                                </div>
+                            </div>
+                            
+                            <div className="wallet-actions">
+                                <button className="wallet-action-button">Deposit</button>
+                                <button className="wallet-action-button">Withdraw</button>
+                                <button className="wallet-action-button">View Transactions</button>
+                            </div>
+                            
+                            <div className="wallet-created">
+                                Created: {new Date(wallet.created_at).toLocaleString()}
+                            </div>
+                        </div>
+                    ))}
+                </div>
+            </div>
+        );
+    };
 
     if (isLoading) {
         return <div className="loading-container">Loading your assets...</div>;
@@ -220,7 +372,7 @@ function Assets() {
                     {showWalletCreation && !walletCreated && (
                         <div className="wallet-selection-container">
                             <h2>Create a New Wallet</h2>
-                            <p className="wallet-intro">Choose the type of wallet that best suits your needs.</p>
+                            <p className="wallet-intro">Configure your new cryptocurrency wallet below.</p>
 
                             <div className="wallet-options">
                                 <div
@@ -239,8 +391,8 @@ function Assets() {
                                 </div>
 
                                 <div
-                                    className={`wallet-option ${selectedWalletType === 'non-custodial' ? 'selected' : ''}`}
-                                    onClick={() => setSelectedWalletType('non-custodial')}
+                                    className={`wallet-option ${selectedWalletType === 'non_custodial' ? 'selected' : ''}`}
+                                    onClick={() => setSelectedWalletType('non_custodial')}
                                 >
                                     <div className="wallet-icon non-custodial-icon">🔐</div>
                                     <h3>Non-Custodial Wallet</h3>
@@ -253,61 +405,132 @@ function Assets() {
                                     </ul>
                                 </div>
                             </div>
+                            
+                            <div className="network-selection">
+                                <h3>Select Network</h3>
+                                <div className="network-options">
+                                    <div 
+                                        className={`network-option ${selectedNetwork === 'ethereum' ? 'selected' : ''}`}
+                                        onClick={() => setSelectedNetwork('ethereum')}
+                                    >
+                                        <div className="network-icon">Ξ</div>
+                                        <div className="network-details">
+                                            <h4>Ethereum Mainnet</h4>
+                                            <p>The primary Ethereum blockchain network</p>
+                                        </div>
+                                    </div>
+                                    
+                                    <div 
+                                        className={`network-option ${selectedNetwork === 'ethereum_testnet' ? 'selected' : ''}`}
+                                        onClick={() => setSelectedNetwork('ethereum_testnet')}
+                                    >
+                                        <div className="network-icon">Ξ-T</div>
+                                        <div className="network-details">
+                                            <h4>Ethereum Testnet</h4>
+                                            <p>For testing with no real value transactions</p>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {walletCreationError && (
+                                <div className="wallet-error-message">
+                                    {walletCreationError}
+                                </div>
+                            )}
 
                             <div className="wallet-selection-actions">
                                 <button
                                     className="wallet-button secondary"
-                                    onClick={() => setShowWalletCreation(false)}
+                                    onClick={() => {
+                                        setShowWalletCreation(false);
+                                        setWalletCreationError('');
+                                    }}
+                                    disabled={isCreatingWallet}
                                 >
                                     Cancel
                                 </button>
                                 <button
                                     className="wallet-button primary"
-                                    disabled={!selectedWalletType}
+                                    disabled={!selectedWalletType || !selectedNetwork || isCreatingWallet}
                                     onClick={handleCreateWallet}
                                 >
-                                    Create {selectedWalletType ? selectedWalletType.charAt(0).toUpperCase() + selectedWalletType.slice(1) : ''} Wallet
+                                    {isCreatingWallet ? (
+                                        <span className="loading-spinner">Creating...</span>
+                                    ) : (
+                                        `Create ${selectedWalletType ? 
+                                            (selectedWalletType === 'custodial' ? 'Custodial' : 'Non-Custodial') : ''} Wallet`
+                                    )}
                                 </button>
                             </div>
                         </div>
                     )}
 
-                    {walletCreated && (
+                    {walletCreated && walletData && (
                         <div className="wallet-confirmation">
                             <div className="success-icon">✓</div>
-                            <h2>Your {selectedWalletType.charAt(0).toUpperCase() + selectedWalletType.slice(1)} Wallet Has Been Created!</h2>
+                            <h2>Your Wallet Has Been Created!</h2>
                             <p>
                                 {selectedWalletType === 'custodial'
                                     ? 'Your wallet is now ready to use. We\'ll manage the security for you.'
                                     : 'Your wallet is now ready to use. Remember to securely store your private keys and seed phrase.'}
                             </p>
-                            <div className="wallet-address">
+                            <div className="wallet-address-box">
                                 <p className="wallet-address-label">Your wallet address:</p>
-                                <code className="wallet-address-value">0x71C7656EC7ab88b098defB751B7401B5f6d8976F</code>
+                                <div className="wallet-address-value-container">
+                                    <code className="wallet-address-value">{walletData.address}</code>
+                                    <button 
+                                        className="copy-address-button"
+                                        onClick={() => navigator.clipboard.writeText(walletData.address)}
+                                    >
+                                        Copy
+                                    </button>
+                                </div>
                             </div>
-                            <button
-                                className="wallet-button primary"
-                                onClick={() => {
-                                    setShowWalletCreation(false);
-                                }}
-                            >
-                                Continue to Dashboard
-                            </button>
+                            <div className="wallet-details">
+                                <div className="wallet-detail">
+                                    <span>Type:</span>
+                                    <strong>{walletData.wallet_type}</strong>
+                                </div>
+                                <div className="wallet-detail">
+                                    <span>Network:</span>
+                                    <strong>{walletData.network}</strong>
+                                </div>
+                                <div className="wallet-detail">
+                                    <span>Status:</span>
+                                    <strong className="status-active">{walletData.status}</strong>
+                                </div>
+                                <div className="wallet-detail">
+                                    <span>Created:</span>
+                                    <strong>{new Date(walletData.created_at).toLocaleString()}</strong>
+                                </div>
+                            </div>
+                            
+                            <div className="wallet-confirmation-actions">
+                                <button
+                                    className="wallet-button primary"
+                                    onClick={() => {
+                                        setShowWalletCreation(false);
+                                        setWalletCreated(false);
+                                    }}
+                                >
+                                    View My Wallets
+                                </button>
+                                <button
+                                    className="wallet-button secondary"
+                                    onClick={() => {
+                                        setWalletCreated(false);
+                                        setSelectedWalletType(null);
+                                        setSelectedNetwork(null);
+                                    }}
+                                >
+                                    Create Another Wallet
+                                </button>
+                            </div>
                         </div>
                     )}
 
-                    {!showWalletCreation && !walletCreated && (
-                        <div className="no-wallet-message">
-                            <h3>No Wallet Found</h3>
-                            <p>You don't have a wallet yet. Create one to start managing your cryptocurrency assets.</p>
-                            <button
-                                className="wallet-button primary"
-                                onClick={() => setShowWalletCreation(true)}
-                            >
-                                Create Wallet
-                            </button>
-                        </div>
-                    )}
+                    {!showWalletCreation && !walletCreated && renderWalletList()}
 
                     {apiError && (
                         <div className="error-alert">
