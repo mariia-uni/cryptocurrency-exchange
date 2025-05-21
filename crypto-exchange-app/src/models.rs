@@ -1,6 +1,6 @@
+use bigdecimal::BigDecimal;
 use diesel::prelude::*;
 use serde::{Deserialize, Serialize};
-use bigdecimal::BigDecimal;
 
 #[derive(Queryable, Selectable, Debug, Clone, Serialize)]
 #[diesel(table_name = crate::schema::users)]
@@ -307,4 +307,35 @@ pub struct CreateWalletRequest {
 pub struct GenerateAddressRequest {
     pub wallet_id: i64,
     pub cryptocurrency: String,
+}
+
+// Cryptocurrency model
+#[derive(Queryable, Serialize, Debug)]
+pub struct Cryptocurrency {
+    pub id: i32,
+    pub symbol: String,
+    pub name: String,
+    pub cmc_id: i32,
+    pub is_active: bool,
+    pub icon_url: Option<String>,
+    pub last_updated: chrono::NaiveDateTime,
+}
+
+#[derive(Insertable, Debug)]
+#[diesel(table_name = crate::schema::cryptocurrencies)]
+pub struct NewCryptocurrency {
+    pub symbol: String,
+    pub name: String,
+    pub cmc_id: i32,
+    pub is_active: bool,
+    pub icon_url: Option<String>,
+}
+
+// API response struct for cryptocurrencies
+#[derive(Serialize)]
+pub struct CryptocurrencyResponse {
+    pub symbol: String,
+    pub name: String,
+    pub icon_url: Option<String>,
+    pub is_active: bool,
 }

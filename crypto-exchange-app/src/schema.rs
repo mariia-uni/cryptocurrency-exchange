@@ -1,6 +1,20 @@
 // @generated automatically by Diesel CLI.
 
 diesel::table! {
+    cryptocurrencies (id) {
+        id -> Int4,
+        #[max_length = 20]
+        symbol -> Varchar,
+        #[max_length = 100]
+        name -> Varchar,
+        cmc_id -> Int4,
+        is_active -> Bool,
+        icon_url -> Nullable<Text>,
+        last_updated -> Timestamp,
+    }
+}
+
+diesel::table! {
     password_reset_tokens (id) {
         id -> Int4,
         user_id -> Int4,
@@ -66,7 +80,7 @@ diesel::table! {
     wallet_addresses (id) {
         id -> Int4,
         wallet_id -> Int8,
-        #[max_length = 10]
+        #[max_length = 20]
         cryptocurrency -> Varchar,
         #[max_length = 100]
         address -> Varchar,
@@ -78,7 +92,7 @@ diesel::table! {
     wallet_balances (id) {
         id -> Int4,
         wallet_id -> Int8,
-        #[max_length = 10]
+        #[max_length = 20]
         cryptocurrency -> Varchar,
         balance -> Numeric,
         last_updated -> Timestamp,
@@ -107,6 +121,7 @@ diesel::joinable!(wallet_balances -> wallets (wallet_id));
 diesel::joinable!(wallets -> users (user_id));
 
 diesel::allow_tables_to_appear_in_same_query!(
+    cryptocurrencies,
     password_reset_tokens,
     user_verifications,
     users,

@@ -1352,6 +1352,9 @@ async fn main() -> std::io::Result<()> {
 
     let pool = db::establish_connection_pool();
 
+    // Create a clone for the background task BEFORE moving pool into HttpServer
+    let pool_for_sync = pool.clone();
+
     info!("Starting server at {}:{}", host, port);
 
     // Create uploads directory if it doesn't exist
@@ -1360,6 +1363,24 @@ async fn main() -> std::io::Result<()> {
         std::fs::create_dir_all(uploads_dir).expect("Failed to create uploads directory");
     }
 
+    // Spawn the background task BEFORE starting the server
+    // so we can use pool_for_sync
+    tokio::spawn(async move {
+        loop {
+            info!("Running scheduled cryptocurrency synchronization");
+
+            // Wrap in a match to ensure the loop continues even if sync fails
+            match markets::sync_cryptocurrencies(&web::Data::new(pool_for_sync.clone())).await {
+                Ok(_) => info!("Scheduled cryptocurrency sync completed successfully"),
+                Err(e) => error!("Scheduled cryptocurrency sync failed: {}", e),
+            }
+
+            // Wait for 12 hours before next sync
+            tokio::time::sleep(tokio::time::Duration::from_secs(12 * 60 * 60)).await;
+        }
+    });
+
+    // Now start the HTTP server with the original pool
     HttpServer::new(move || {
         let cors = Cors::default()
             .allowed_origin("http://localhost:3000")
@@ -1375,10 +1396,10 @@ async fn main() -> std::io::Result<()> {
         // Create the wallet scope inside the closure instead
         let wallet_scope = web::scope("/wallet")
             // Make sure list_wallets is registered BEFORE any parameter-based routes
-            .service(wallets::list_wallets)  // This should come first!
+            .service(wallets::list_wallets) // This should come first!
             .service(wallets::create_wallet)
             .service(wallets::generate_address)
-            .service(wallets::get_wallet)    // This likely has a param that's catching "list"
+            .service(wallets::get_wallet) // This likely has a param that's catching "list"
             .service(wallets::update_balance);
 
         App::new()
@@ -1413,6 +1434,7 @@ async fn main() -> std::io::Result<()> {
                     .service(admin_update_user), // Remove the password reset endpoint from here
             )
             .service(markets::get_markets) // Add the markets endpoint
+            .service(markets::get_cryptocurrencies) // New endpoint
             .service(wallet_scope) // Keep only this wallet registration
     })
     .bind(format!("{}:{}", host, port))?

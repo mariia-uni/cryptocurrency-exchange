@@ -1,9 +1,9 @@
 use crate::auth;
 use crate::db::DbPool;
 use crate::models::{
-    CreateWalletRequest, GenerateAddressRequest, NewWallet, NewWalletAddress, NewWalletBalance,
-    Wallet, WalletAddress, WalletAddressResponse, WalletBalance, WalletBalanceResponse,
-    WalletResponseWithAddresses,
+    CreateWalletRequest, Cryptocurrency, GenerateAddressRequest, NewWallet, NewWalletAddress,
+    NewWalletBalance, Wallet, WalletAddress, WalletAddressResponse, WalletBalance,
+    WalletBalanceResponse, WalletResponseWithAddresses,
 };
 use crate::schema::{wallet_addresses, wallet_balances, wallets};
 use actix_web::{HttpRequest, HttpResponse, get, post, web};
@@ -86,6 +86,46 @@ pub async fn create_wallet(
     })))
 }
 
+// Update the validate_cryptocurrency function to allow any cryptocurrency in our database
+async fn validate_cryptocurrency(
+    cryptocurrency: &str,
+    pool: &web::Data<DbPool>,
+) -> Result<bool, actix_web::Error> {
+    let mut conn = pool
+        .get()
+        .map_err(|_| actix_web::error::ErrorInternalServerError("Database connection error"))?;
+
+    let cryptocurrency_clone = cryptocurrency.to_string();
+
+    // Explicitly specify the return type of the closure to handle the inner Result
+    let crypto_exists = web::block(move || -> Result<bool, diesel::result::Error> {
+        use crate::schema::cryptocurrencies::dsl::*;
+        let count = cryptocurrencies
+            .filter(symbol.eq(cryptocurrency_clone))
+            .filter(is_active.eq(true))
+            .count()
+            .get_result::<i64>(&mut conn)?;
+
+        Ok(count > 0)
+    })
+    .await
+    .map_err(|e| {
+        error!("Database error when validating cryptocurrency: {:?}", e);
+        actix_web::error::ErrorInternalServerError("Failed to validate cryptocurrency")
+    })?;
+
+    // Unwrap the inner Result
+    match crypto_exists {
+        Ok(exists) => Ok(exists),
+        Err(e) => {
+            error!("Diesel error when validating cryptocurrency: {:?}", e);
+            Err(actix_web::error::ErrorInternalServerError(
+                "Database error validating cryptocurrency",
+            ))
+        }
+    }
+}
+
 // Generate a cryptocurrency address for a wallet
 #[post("/address/generate")]
 pub async fn generate_address(
@@ -98,9 +138,11 @@ pub async fn generate_address(
 
     // Validate cryptocurrency
     let cryptocurrency = address_req.cryptocurrency.to_uppercase();
-    if !["BTC", "ETH", "BTC_TESTNET", "ETH_TESTNET"].contains(&cryptocurrency.as_str()) {
+
+    // Check if cryptocurrency is in our database
+    if !validate_cryptocurrency(&cryptocurrency, &pool).await? {
         return Ok(HttpResponse::BadRequest().json(serde_json::json!({
-            "error": "Invalid cryptocurrency. Supported values: BTC, ETH, BTC_TESTNET, ETH_TESTNET."
+            "error": format!("Unsupported cryptocurrency: {}", cryptocurrency)
         })));
     }
 
@@ -372,6 +414,12 @@ pub async fn list_wallets(
 
     let result = web::block(
         move || -> Result<Vec<WalletResponseWithAddresses>, diesel::result::Error> {
+            // Get all cryptocurrencies from the database
+            use crate::schema::cryptocurrencies::dsl as crypto_dsl;
+            let all_cryptocurrencies = crypto_dsl::cryptocurrencies
+                .filter(crypto_dsl::is_active.eq(true))
+                .load::<Cryptocurrency>(&mut conn)?;
+
             // Get all wallets for this user
             let wallets: Vec<Wallet> = wallets::table
                 .filter(wallets::user_id.eq(user_id))
@@ -385,11 +433,43 @@ pub async fn list_wallets(
                     .filter(wallet_addresses::wallet_id.eq(wallet.wallet_id))
                     .load::<WalletAddress>(&mut conn)?;
 
-                // Get balances for this wallet
-                let balances = wallet_balances::table
+                // Get existing balances for this wallet
+                let existing_balances = wallet_balances::table
                     .filter(wallet_balances::wallet_id.eq(wallet.wallet_id))
-                    .load::<WalletBalance>(&mut conn)
-                    .optional()?;
+                    .load::<WalletBalance>(&mut conn)?;
+
+                // Create a map of cryptocurrency symbol to balance
+                let mut balance_map: std::collections::HashMap<String, WalletBalance> =
+                    existing_balances
+                        .into_iter()
+                        .map(|b| (b.cryptocurrency.clone(), b))
+                        .collect();
+
+                // Create balance responses for all cryptocurrencies
+                let mut balances_response: Vec<WalletBalanceResponse> = Vec::new();
+
+                // Add all cryptocurrencies to the response
+                for crypto in &all_cryptocurrencies {
+                    // Check if we have a balance for this cryptocurrency
+                    if let Some(balance) = balance_map.get(&crypto.symbol) {
+                        // Use existing balance
+                        balances_response.push(WalletBalanceResponse {
+                            cryptocurrency: balance.cryptocurrency.clone(),
+                            balance: balance.balance.to_string(),
+                            last_updated: balance.last_updated,
+                        });
+                    } else {
+                        // Create zero balance entry
+                        balances_response.push(WalletBalanceResponse {
+                            cryptocurrency: crypto.symbol.clone(),
+                            balance: "0".to_string(),
+                            last_updated: chrono::NaiveDateTime::from_timestamp_opt(0, 0).unwrap(),
+                        });
+                    }
+                }
+
+                // Sort balances by cryptocurrency symbol
+                balances_response.sort_by(|a, b| a.cryptocurrency.cmp(&b.cryptocurrency));
 
                 let addresses_response = addresses
                     .iter()
@@ -397,16 +477,6 @@ pub async fn list_wallets(
                         cryptocurrency: addr.cryptocurrency.clone(),
                         address: addr.address.clone(),
                         created_at: addr.created_at,
-                    })
-                    .collect();
-
-                let balances_response = balances
-                    .unwrap_or_default()
-                    .into_iter()
-                    .map(|bal| WalletBalanceResponse {
-                        cryptocurrency: bal.cryptocurrency,
-                        balance: bal.balance.to_string(),
-                        last_updated: bal.last_updated,
                     })
                     .collect();
 
@@ -431,14 +501,12 @@ pub async fn list_wallets(
         actix_web::error::ErrorInternalServerError("Failed to list wallets")
     })?;
 
-    // Unwrap the inner Result to get the actual wallet responses
-    // This is the important change - unwrap the inner diesel::result::Error
+    // Unwrap the inner Result
     let wallet_responses = result.map_err(|e| {
         error!("Diesel error listing wallets: {:?}", e);
         actix_web::error::ErrorInternalServerError("Database error listing wallets")
     })?;
 
-    // Return the wallets array correctly wrapped in a JSON object
     Ok(HttpResponse::Ok().json(serde_json::json!({ "wallets": wallet_responses })))
 }
 
@@ -488,9 +556,9 @@ pub async fn update_balance(
 
     // Validate cryptocurrency and amount
     let cryptocurrency = balance_req.cryptocurrency.to_uppercase();
-    if !["BTC", "ETH", "BTC_TESTNET", "ETH_TESTNET"].contains(&cryptocurrency.as_str()) {
+    if !validate_cryptocurrency(&cryptocurrency, &pool).await? {
         return Ok(HttpResponse::BadRequest().json(serde_json::json!({
-            "error": "Invalid cryptocurrency. Supported values: BTC, ETH, BTC_TESTNET, ETH_TESTNET."
+            "error": format!("Invalid cryptocurrency: {}", cryptocurrency)
         })));
     }
 

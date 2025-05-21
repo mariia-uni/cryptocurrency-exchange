@@ -26,6 +26,17 @@ function Assets() {
     const [addressGenerationStatus, setAddressGenerationStatus] = useState(null);
     const [activeWalletId, setActiveWalletId] = useState(null);
 
+    // New state for available cryptocurrencies
+    const [availableCryptocurrencies, setAvailableCryptocurrencies] = useState([]);
+    const [isLoadingCryptocurrencies, setIsLoadingCryptocurrencies] = useState(true);
+
+    // Add state for search functionality
+    const [cryptoSearch, setCryptoSearch] = useState('');
+
+    // Add pagination state
+    const [currentPage, setCurrentPage] = useState(1);
+    const itemsPerPage = 20;
+
     // Enhanced function to get proper display name from user data
     const getDisplayName = (user) => {
         if (!user) return "Guest";
@@ -115,7 +126,7 @@ function Assets() {
         setActiveWalletId(walletId);
         try {
             setIsGeneratingAddress(true);
-            
+
             const token = localStorage.getItem('auth_token');
             const response = await fetch('http://localhost:8080/wallet/address/generate', {
                 method: 'POST',
@@ -128,17 +139,17 @@ function Assets() {
                     cryptocurrency: cryptocurrency
                 }),
             });
-            
+
             if (!response.ok) {
                 const errorData = await response.json();
                 throw new Error(errorData.error || 'Failed to generate address');
             }
-            
+
             const data = await response.json();
-            
+
             // Refresh wallet list with fresh data - most important part
             await fetchUserWallets(token);
-            
+
             // Update generation status
             setAddressGenerationStatus({
                 success: true,
@@ -163,7 +174,7 @@ function Assets() {
         try {
             setIsLoadingWallets(true);
             console.log("Fetching wallets with token:", token);
-            
+
             const response = await fetch('http://localhost:8080/wallet/list', {
                 method: 'GET',
                 headers: {
@@ -172,19 +183,19 @@ function Assets() {
                     'Accept': 'application/json' // Add explicit Accept header
                 },
             });
-            
+
             console.log("Response status:", response.status);
-            
+
             if (response.ok) {
                 const text = await response.text();
                 console.log('Raw wallet response:', text);
-                
+
                 // Only try to parse if it looks like valid JSON
                 if (text && text.trim()) {
                     try {
                         const data = JSON.parse(text);
                         console.log('Parsed wallet data:', data);
-                        
+
                         if (data.wallets && Array.isArray(data.wallets)) {
                             setUserWallets(data.wallets);
                         } else {
@@ -212,6 +223,70 @@ function Assets() {
         } finally {
             setIsLoadingWallets(false);
         }
+    };
+
+    // Function to fetch available cryptocurrencies
+    const fetchAvailableCryptocurrencies = async (token) => {
+        try {
+            setIsLoadingCryptocurrencies(true);
+
+            const response = await fetch('http://localhost:8080/api/cryptocurrencies', {
+                method: 'GET',
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json',
+                },
+            });
+
+            if (response.ok) {
+                const data = await response.json();
+                if (data.cryptocurrencies && Array.isArray(data.cryptocurrencies)) {
+                    console.log('Available cryptocurrencies:', data.cryptocurrencies);
+                    setAvailableCryptocurrencies(data.cryptocurrencies);
+                } else {
+                    console.warn("Unexpected cryptocurrency data format:", data);
+                    // Fallback to BTC and ETH
+                    setAvailableCryptocurrencies([
+                        { symbol: 'BTC', name: 'Bitcoin' },
+                        { symbol: 'ETH', name: 'Ethereum' }
+                    ]);
+                }
+            } else {
+                console.error(`Could not fetch cryptocurrencies. Status: ${response.status}`);
+                // Fallback to BTC and ETH
+                setAvailableCryptocurrencies([
+                    { symbol: 'BTC', name: 'Bitcoin' },
+                    { symbol: 'ETH', name: 'Ethereum' }
+                ]);
+            }
+        } catch (error) {
+            console.error('Error fetching cryptocurrencies:', error);
+            // Fallback to BTC and ETH
+            setAvailableCryptocurrencies([
+                { symbol: 'BTC', name: 'Bitcoin' },
+                { symbol: 'ETH', name: 'Ethereum' }
+            ]);
+        } finally {
+            setIsLoadingCryptocurrencies(false);
+        }
+    };
+
+    // Add this filter function
+    const filterCryptocurrencies = (balances) => {
+        if (!cryptoSearch) return balances;
+
+        return balances.filter(balance => {
+            const crypto = availableCryptocurrencies.find(c => c.symbol === balance.cryptocurrency);
+            const name = crypto ? crypto.name : balance.cryptocurrency;
+            return balance.cryptocurrency.toLowerCase().includes(cryptoSearch.toLowerCase()) ||
+                name.toLowerCase().includes(cryptoSearch.toLowerCase());
+        });
+    };
+
+    // Add pagination logic
+    const paginateCryptocurrencies = (items) => {
+        const startIndex = (currentPage - 1) * itemsPerPage;
+        return items.slice(startIndex, startIndex + itemsPerPage);
     };
 
     useEffect(() => {
@@ -273,6 +348,9 @@ function Assets() {
                 // Fetch user wallets
                 await fetchUserWallets(token);
 
+                // Fetch available cryptocurrencies
+                await fetchAvailableCryptocurrencies(token);
+
             } catch (error) {
                 console.error('Error in assets data fetching:', error);
                 setApiError('Could not load your asset information. Please try again later.');
@@ -328,6 +406,17 @@ function Assets() {
     // Render wallet with multi-chain support
     const renderWallet = (wallet) => {
         const isActiveWallet = wallet.wallet_id === activeWalletId;
+
+        // Sort cryptocurrencies by symbol
+        const sortedBalances = [...wallet.balances].sort((a, b) =>
+            a.cryptocurrency.localeCompare(b.cryptocurrency)
+        );
+
+        // Use filteredBalances instead of sortedBalances
+        const filteredBalances = filterCryptocurrencies(sortedBalances);
+        const paginatedBalances = paginateCryptocurrencies(filteredBalances);
+        const totalPages = Math.ceil(filteredBalances.length / itemsPerPage);
+
         return (
             <div id={`wallet-${wallet.wallet_id}`} key={wallet.wallet_id} className="wallet-card">
                 <div className="wallet-card-header">
@@ -367,39 +456,106 @@ function Assets() {
                     </div>
                 )}
 
-                {/* Display balances */}
-                {wallet.balances && wallet.balances.length > 0 && (
-                    <div className="wallet-balances">
-                        <h4>Balances</h4>
-                        {wallet.balances.map(balance => (
-                            <div key={balance.cryptocurrency} className="balance-item">
-                                <span className="crypto-name">{balance.cryptocurrency}:</span>
-                                <span className="balance-amount">{balance.balance}</span>
-                            </div>
-                        ))}
+                {/* Display all cryptocurrency balances (including zero balances) */}
+                <div className="wallet-balances">
+                    <h4>Balances</h4>
+
+                    {/* Search input */}
+                    <div className="balance-search">
+                        <input
+                            type="text"
+                            placeholder="Search cryptocurrencies..."
+                            value={cryptoSearch}
+                            onChange={(e) => setCryptoSearch(e.target.value)}
+                            className="balance-search-input"
+                        />
                     </div>
-                )}
+
+                    {/* Table with horizontal scrolling on small screens */}
+                    <div className="crypto-balance-table">
+                        <table className="balance-table">
+                            <thead>
+                                <tr>
+                                    <th>Cryptocurrency</th>
+                                    <th>Balance</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {paginatedBalances.length > 0 ? (
+                                    paginatedBalances.map(balance => (
+                                        <tr key={balance.cryptocurrency} className="balance-row">
+                                            <td className="crypto-name-cell">
+                                                <div className="crypto-icon-name">
+                                                    {getCryptoIcon(balance.cryptocurrency, availableCryptocurrencies)}
+                                                    <span className="crypto-name">
+                                                        {getCryptoFullName(balance.cryptocurrency, availableCryptocurrencies)}
+                                                    </span>
+                                                </div>
+                                            </td>
+                                            <td className="balance-amount">
+                                                {parseFloat(balance.balance) > 0 ? balance.balance : "0.00"}
+                                            </td>
+                                            <td className="balance-actions">
+                                                <button className="action-btn deposit-btn">Deposit</button>
+                                                <button
+                                                    className="action-btn withdraw-btn"
+                                                    disabled={parseFloat(balance.balance) <= 0}
+                                                >
+                                                    Withdraw
+                                                </button>
+                                            </td>
+                                        </tr>
+                                    ))
+                                ) : (
+                                    <tr>
+                                        <td colSpan="3" className="empty-balance-message">
+                                            No cryptocurrencies match your search
+                                        </td>
+                                    </tr>
+                                )}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
 
                 {/* Generate address buttons */}
                 <div className="generate-address-section">
                     <h4>Generate New Address</h4>
-                    <div className="generate-buttons">
-                        {['ETH', 'BTC'].map(crypto => {
-                            // Check if address already exists for this crypto
-                            const addressExists = wallet.addresses &&
-                                wallet.addresses.some(a => a.cryptocurrency === crypto);
+                    <div className="generate-buttons-container">
+                        {isLoadingCryptocurrencies ? (
+                            <div className="loading-spinner">Loading cryptocurrencies...</div>
+                        ) : (
+                            <div className="crypto-button-grid">
+                                {availableCryptocurrencies.map(crypto => {
+                                    // Check if address already exists for this crypto
+                                    const addressExists = wallet.addresses &&
+                                        wallet.addresses.some(a => a.cryptocurrency === crypto.symbol);
 
-                            return (
-                                <button
-                                    key={crypto}
-                                    className={`generate-button ${addressExists ? 'disabled' : ''}`}
-                                    disabled={addressExists || isGeneratingAddress}
-                                    onClick={() => generateAddress(wallet.wallet_id, crypto)}
-                                >
-                                    {addressExists ? `${crypto} Address Exists` : `Generate ${crypto} Address`}
-                                </button>
-                            );
-                        })}
+                                    return (
+                                        <button
+                                            key={crypto.symbol}
+                                            className={`generate-button ${addressExists ? 'disabled' : ''}`}
+                                            disabled={addressExists || isGeneratingAddress}
+                                            onClick={() => generateAddress(wallet.wallet_id, crypto.symbol)}
+                                        >
+                                            {crypto.icon_url ? (
+                                                <img
+                                                    src={crypto.icon_url}
+                                                    alt={crypto.symbol}
+                                                    className="crypto-icon"
+                                                />
+                                            ) : (
+                                                <span className="crypto-icon-placeholder">{crypto.symbol.charAt(0)}</span>
+                                            )}
+                                            <span className="crypto-button-text">
+                                                {addressExists ? `${crypto.symbol} Exists` : `Generate ${crypto.symbol}`}
+                                            </span>
+                                        </button>
+                                    );
+                                })}
+                            </div>
+                        )}
                     </div>
 
                     {/* Display the address generation status */}
@@ -421,17 +577,44 @@ function Assets() {
                     )}
                 </div>
 
-                <div className="wallet-actions">
-                    <button className="wallet-action-button">Deposit</button>
-                    <button className="wallet-action-button">Withdraw</button>
-                    <button className="wallet-action-button">View Transactions</button>
-                </div>
-
-                <div className="wallet-created">
-                    Created: {new Date(wallet.created_at).toLocaleString()}
+                {/* Pagination controls */}
+                <div className="pagination-controls">
+                    <button
+                        className="pagination-button"
+                        onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                        disabled={currentPage === 1}
+                    >
+                        Previous
+                    </button>
+                    <span className="pagination-info">
+                        Page {currentPage} of {totalPages || 1}
+                    </span>
+                    <button
+                        className="pagination-button"
+                        onClick={() => setCurrentPage(prev => prev < totalPages ? prev + 1 : prev)}
+                        disabled={currentPage >= totalPages}
+                    >
+                        Next
+                    </button>
                 </div>
             </div>
         );
+    };
+
+    const getCryptoIcon = (symbol, cryptoList) => {
+        const crypto = cryptoList.find(c => c.symbol === symbol);
+        if (crypto && crypto.icon_url) {
+            return <img src={crypto.icon_url} alt={symbol} className="crypto-icon" />;
+        }
+        return <span className="crypto-icon-placeholder">{symbol.charAt(0)}</span>;
+    };
+
+    const getCryptoFullName = (symbol, cryptoList) => {
+        const crypto = cryptoList.find(c => c.symbol === symbol);
+        if (crypto) {
+            return `${symbol} - ${crypto.name}`;
+        }
+        return symbol;
     };
 
     if (isLoading) {
@@ -613,7 +796,13 @@ function Assets() {
                                 </div>
                                 <div className="wallet-detail full-width">
                                     <span>Supported Cryptocurrencies:</span>
-                                    <strong>ETH, BTC</strong>
+                                    <strong>
+                                        {isLoadingCryptocurrencies
+                                            ? "Loading supported cryptocurrencies..."
+                                            : availableCryptocurrencies.length > 0
+                                                ? availableCryptocurrencies.map(c => c.symbol).join(", ")
+                                                : "ETH, BTC (Default)"}
+                                    </strong>
                                 </div>
                             </div>
 
@@ -621,86 +810,64 @@ function Assets() {
                                 <h4>Next Steps</h4>
                                 <p>Generate blockchain-specific addresses to start using your wallet:</p>
                                 <div className="next-steps-actions">
-                                    <button
-                                        className="next-step-button"
-                                        onClick={async (event) => {
-                                            // Define variables outside try/catch for scope access
-                                            const btnElement = event.target;
-                                            const originalText = btnElement.textContent;
+                                    {isLoadingCryptocurrencies ? (
+                                        <div className="loading-spinner">Loading cryptocurrencies...</div>
+                                    ) : (
+                                        availableCryptocurrencies.slice(0, 4).map(crypto => (
+                                            <button
+                                                key={crypto.symbol}
+                                                className="next-step-button"
+                                                onClick={async (event) => {
+                                                    // Define variables outside try/catch for scope access
+                                                    const btnElement = event.target;
+                                                    const originalText = btnElement.textContent;
 
-                                            try {
-                                                // Show loading state
-                                                btnElement.textContent = "Generating...";
-                                                btnElement.disabled = true;
+                                                    try {
+                                                        // Show loading state
+                                                        btnElement.textContent = "Generating...";
+                                                        btnElement.disabled = true;
 
-                                                // Generate ETH address
-                                                await generateAddress(walletData.wallet_id, "ETH");
+                                                        // Generate address for the selected cryptocurrency
+                                                        await generateAddress(walletData.wallet_id, crypto.symbol);
 
-                                                // Don't change view - stay on the confirmation page
-                                                // setShowWalletCreation(false); - REMOVED
-                                                // setWalletCreated(false); - REMOVED
+                                                        // Don't change view - stay on the confirmation page
+                                                        // setShowWalletCreation(false); - REMOVED
+                                                        // setWalletCreated(false); - REMOVED
 
-                                                // Update button to show address exists
-                                                btnElement.textContent = "ETH Address Generated";
-                                                btnElement.disabled = true;
-                                                btnElement.classList.add("address-generated");
-                                            } catch (error) {
-                                                // Handle errors
-                                                console.error("Failed to generate ETH address:", error);
-                                                setAddressGenerationStatus({
-                                                    success: false,
-                                                    message: "Failed to generate ETH address. Please try again.",
-                                                    walletId: walletData.wallet_id
-                                                });
+                                                        // Update button to show address exists
+                                                        btnElement.textContent = `${crypto.symbol} Address Generated`;
+                                                        btnElement.disabled = true;
+                                                        btnElement.classList.add("address-generated");
+                                                    } catch (error) {
+                                                        // Handle errors
+                                                        console.error(`Failed to generate ${crypto.symbol} address:`, error);
+                                                        setAddressGenerationStatus({
+                                                            success: false,
+                                                            message: `Failed to generate ${crypto.symbol} address. Please try again.`,
+                                                            walletId: walletData.wallet_id
+                                                        });
 
-                                                // Reset button state
-                                                btnElement.textContent = originalText;
-                                                btnElement.disabled = false;
-                                            }
-                                        }}
-                                    >
-                                        Generate ETH Address
-                                    </button>
-                                    <button
-                                        className="next-step-button"
-                                        onClick={async (event) => {
-                                            // Define variables outside try/catch for scope access
-                                            const btnElement = event.target;
-                                            const originalText = btnElement.textContent;
-
-                                            try {
-                                                // Show loading state
-                                                btnElement.textContent = "Generating...";
-                                                btnElement.disabled = true;
-
-                                                // Generate BTC address
-                                                await generateAddress(walletData.wallet_id, "BTC");
-
-                                                // Don't change view - stay on the confirmation page
-                                                // setShowWalletCreation(false); - REMOVED
-                                                // setWalletCreated(false); - REMOVED
-
-                                                // Update button to show address exists
-                                                btnElement.textContent = "BTC Address Generated";
-                                                btnElement.disabled = true;
-                                                btnElement.classList.add("address-generated");
-                                            } catch (error) {
-                                                // Handle errors
-                                                console.error("Failed to generate BTC address:", error);
-                                                setAddressGenerationStatus({
-                                                    success: false,
-                                                    message: "Failed to generate BTC address. Please try again.",
-                                                    walletId: walletData.wallet_id
-                                                });
-
-                                                // Reset button state
-                                                btnElement.textContent = originalText;
-                                                btnElement.disabled = false;
-                                            }
-                                        }}
-                                    >
-                                        Generate BTC Address
-                                    </button>
+                                                        // Reset button state
+                                                        btnElement.textContent = originalText;
+                                                        btnElement.disabled = false;
+                                                    }
+                                                }}
+                                            >
+                                                Generate {crypto.symbol} Address
+                                            </button>
+                                        ))
+                                    )}
+                                    {availableCryptocurrencies.length > 4 && (
+                                        <button
+                                            className="next-step-button view-all"
+                                            onClick={() => {
+                                                setShowWalletCreation(false);
+                                                setWalletCreated(false);
+                                            }}
+                                        >
+                                            View All {availableCryptocurrencies.length} Cryptocurrencies
+                                        </button>
+                                    )}
                                 </div>
                             </div>
 
@@ -726,12 +893,12 @@ function Assets() {
                                                 // Update user wallets with fresh data
                                                 setUserWallets(data.wallets || []);
                                             });
-                                            
+
                                             // Then update state to show wallet list
                                             setShowWalletCreation(false);
                                             setWalletCreated(false);
                                             setWalletData(null);
-                                            
+
                                             // Scroll to top
                                             window.scrollTo({
                                                 top: 0,
