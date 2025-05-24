@@ -26,6 +26,30 @@ diesel::table! {
 }
 
 diesel::table! {
+    transactions (id) {
+        id -> Int4,
+        user_id -> Int4,
+        wallet_id -> Int8,
+        amount -> Numeric,
+        #[max_length = 20]
+        cryptocurrency -> Varchar,
+        #[max_length = 20]
+        transaction_type -> Varchar,
+        #[max_length = 100]
+        transaction_hash -> Varchar,
+        #[max_length = 20]
+        status -> Varchar,
+        #[max_length = 50]
+        blockchain -> Nullable<Varchar>,
+        #[max_length = 100]
+        address -> Nullable<Varchar>,
+        fee -> Nullable<Numeric>,
+        created_at -> Timestamp,
+        updated_at -> Timestamp,
+    }
+}
+
+diesel::table! {
     user_verifications (id) {
         id -> Int4,
         user_id -> Int4,
@@ -96,6 +120,8 @@ diesel::table! {
         cryptocurrency -> Varchar,
         balance -> Numeric,
         last_updated -> Timestamp,
+        usd_value -> Nullable<Numeric>,
+        last_price -> Nullable<Numeric>,
     }
 }
 
@@ -115,6 +141,8 @@ diesel::table! {
 }
 
 diesel::joinable!(password_reset_tokens -> users (user_id));
+diesel::joinable!(transactions -> users (user_id));
+diesel::joinable!(transactions -> wallets (wallet_id));
 diesel::joinable!(user_verifications -> users (user_id));
 diesel::joinable!(wallet_addresses -> wallets (wallet_id));
 diesel::joinable!(wallet_balances -> wallets (wallet_id));
@@ -123,6 +151,7 @@ diesel::joinable!(wallets -> users (user_id));
 diesel::allow_tables_to_appear_in_same_query!(
     cryptocurrencies,
     password_reset_tokens,
+    transactions,
     user_verifications,
     users,
     wallet_addresses,

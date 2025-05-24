@@ -289,6 +289,60 @@ function Assets() {
         return items.slice(startIndex, startIndex + itemsPerPage);
     };
 
+    // Format USD values with appropriate precision based on value magnitude
+    const formatUsdValue = (value) => {
+        if (!value || isNaN(parseFloat(value))) return "$0.00";
+        
+        const numValue = parseFloat(value);
+        
+        // For very small values (less than $0.000001), use 9 decimal places
+        if (numValue < 0.000001 && numValue > 0) {
+            return `$${numValue.toFixed(9)}`;
+        } 
+        // For small values (less than $0.01), use 6 decimal places
+        else if (numValue < 0.01 && numValue > 0) {
+            return `$${numValue.toFixed(6)}`;
+        }
+        // For medium values (less than $1000), use 2 decimal places
+        else if (numValue < 1000) {
+            return `$${numValue.toFixed(2)}`;
+        } 
+        // For large values, use commas for thousands and 2 decimal places
+        else {
+            return `$${numValue.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+        }
+    };
+
+    // Add this utility function after your formatUsdValue function
+
+    // Format cryptocurrency values with appropriate precision based on magnitude
+    const formatCryptoValue = (value, symbol) => {
+        if (!value || isNaN(parseFloat(value))) return "0.00000000";
+        
+        const numValue = parseFloat(value);
+        
+        // Different formatting based on cryptocurrency type
+        if (symbol === 'BTC' || symbol === 'ETH') {
+            // For BTC/ETH show 8 decimal places
+            return numValue.toFixed(8);
+        } else if (numValue < 0.0001 && numValue > 0) {
+            // For very small values of alt coins, use 9 decimal places
+            return numValue.toFixed(9);
+        } else if (numValue < 1 && numValue > 0) {
+            // For smaller values show 6 decimal places
+            return numValue.toFixed(6);
+        } else if (numValue >= 1 && numValue < 1000) {
+            // For medium values show 4 decimal places
+            return numValue.toFixed(4);
+        } else if (numValue >= 1000) {
+            // For large values show 2 decimal places
+            return numValue.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        } else {
+            // Default case
+            return numValue.toString();
+        }
+    };
+
     useEffect(() => {
         const fetchUserData = async () => {
             try {
@@ -363,6 +417,25 @@ function Assets() {
         return () => { };
     }, [navigate]);
 
+    // Example of how to update Assets.js later (not part of current task)
+    useEffect(() => {
+        // Get the selected wallet ID from sessionStorage
+        const selectedWalletId = sessionStorage.getItem('selectedWalletId');
+        if (selectedWalletId) {
+            // Clear it to avoid issues on page refresh
+            sessionStorage.removeItem('selectedWalletId');
+            
+            // Scroll to the selected wallet after wallets are loaded
+            setTimeout(() => {
+                const element = document.getElementById(`wallet-${selectedWalletId}`);
+                if (element) {
+                    element.scrollIntoView({ behavior: 'smooth' });
+                    element.classList.add('highlighted');
+                }
+            }, 500);
+        }
+    }, [userWallets]);
+
     // Render the wallet list
     const renderWalletList = () => {
         if (isLoadingWallets) {
@@ -387,7 +460,15 @@ function Assets() {
         return (
             <div className="wallets-container">
                 <div className="wallets-header">
-                    <h3>Your Wallets</h3>
+                    <div className="wallets-header-left">
+                        <h3>Your Wallets</h3>
+                        <button 
+                            className="back-to-overview-button"
+                            onClick={() => navigate('/assets-overview')}
+                        >
+                            Back to Overview
+                        </button>
+                    </div>
                     <button
                         className="wallet-button primary"
                         onClick={() => setShowWalletCreation(true)}
@@ -416,6 +497,15 @@ function Assets() {
         const filteredBalances = filterCryptocurrencies(sortedBalances);
         const paginatedBalances = paginateCryptocurrencies(filteredBalances);
         const totalPages = Math.ceil(filteredBalances.length / itemsPerPage);
+
+        // Calculate total crypto balance and USD value for the wallet
+        const totalCryptoBalance = wallet.balances.reduce((total, balance) => {
+            return total + (parseFloat(balance.balance) || 0);
+        }, 0);
+
+        const totalUsdValue = wallet.balances.reduce((total, balance) => {
+            return total + (parseFloat(balance.usd_value) || 0);
+        }, 0);
 
         return (
             <div id={`wallet-${wallet.wallet_id}`} key={wallet.wallet_id} className="wallet-card">
@@ -494,7 +584,16 @@ function Assets() {
                                                 </div>
                                             </td>
                                             <td className="balance-amount">
-                                                {parseFloat(balance.balance) > 0 ? balance.balance : "0.00"}
+                                                <div>
+                                                    <div className="crypto-balance-value">
+                                                        {parseFloat(balance.balance) > 0 
+                                                            ? formatCryptoValue(balance.balance, balance.cryptocurrency) 
+                                                            : "0.00000000"} {balance.cryptocurrency}
+                                                    </div>
+                                                    <div className="usd-value">
+                                                        ≈ {formatUsdValue(balance.usd_value)} USD
+                                                    </div>
+                                                </div>
                                             </td>
                                             <td className="balance-actions">
                                                 <button className="action-btn deposit-btn">Deposit</button>
@@ -597,6 +696,17 @@ function Assets() {
                         Next
                     </button>
                 </div>
+
+                {/* For the total balance at the top of the page (if applicable) */}
+                <div className="total-crypto-balance">
+                    <span className="balance-label">Total {crypto.symbol}:</span>
+                    <span className="balance-value">
+                        {formatCryptoValue(totalCryptoBalance, crypto.symbol)} {crypto.symbol}
+                    </span>
+                    <span className="usd-equivalent">
+                        ≈ {formatUsdValue(totalUsdValue)} USD
+                    </span>
+                </div>
             </div>
         );
     };
@@ -680,13 +790,13 @@ function Assets() {
                             <span className="nav-icon">💱</span>
                             <span className="nav-text">Markets</span>
                         </li>
-                        <li className="nav-item active">
+                        <li className="nav-item" onClick={() => navigate('/assets-overview')}>
                             <span className="nav-icon">💎</span>
                             <span className="nav-text">Assets</span>
                         </li>
-                        <li className="nav-item">
+                        <li className="nav-item" onClick={() => navigate('/deposit')}>
                             <span className="nav-icon">💰</span>
-                            <span className="nav-text">Trade</span>
+                            <span className="nav-text">Deposit</span>
                         </li>
                         <li className="nav-item" onClick={() => navigate('/settings')}>
                             <span className="nav-icon">👤</span>
@@ -806,71 +916,6 @@ function Assets() {
                                 </div>
                             </div>
 
-                            <div className="next-steps">
-                                <h4>Next Steps</h4>
-                                <p>Generate blockchain-specific addresses to start using your wallet:</p>
-                                <div className="next-steps-actions">
-                                    {isLoadingCryptocurrencies ? (
-                                        <div className="loading-spinner">Loading cryptocurrencies...</div>
-                                    ) : (
-                                        availableCryptocurrencies.slice(0, 4).map(crypto => (
-                                            <button
-                                                key={crypto.symbol}
-                                                className="next-step-button"
-                                                onClick={async (event) => {
-                                                    // Define variables outside try/catch for scope access
-                                                    const btnElement = event.target;
-                                                    const originalText = btnElement.textContent;
-
-                                                    try {
-                                                        // Show loading state
-                                                        btnElement.textContent = "Generating...";
-                                                        btnElement.disabled = true;
-
-                                                        // Generate address for the selected cryptocurrency
-                                                        await generateAddress(walletData.wallet_id, crypto.symbol);
-
-                                                        // Don't change view - stay on the confirmation page
-                                                        // setShowWalletCreation(false); - REMOVED
-                                                        // setWalletCreated(false); - REMOVED
-
-                                                        // Update button to show address exists
-                                                        btnElement.textContent = `${crypto.symbol} Address Generated`;
-                                                        btnElement.disabled = true;
-                                                        btnElement.classList.add("address-generated");
-                                                    } catch (error) {
-                                                        // Handle errors
-                                                        console.error(`Failed to generate ${crypto.symbol} address:`, error);
-                                                        setAddressGenerationStatus({
-                                                            success: false,
-                                                            message: `Failed to generate ${crypto.symbol} address. Please try again.`,
-                                                            walletId: walletData.wallet_id
-                                                        });
-
-                                                        // Reset button state
-                                                        btnElement.textContent = originalText;
-                                                        btnElement.disabled = false;
-                                                    }
-                                                }}
-                                            >
-                                                Generate {crypto.symbol} Address
-                                            </button>
-                                        ))
-                                    )}
-                                    {availableCryptocurrencies.length > 4 && (
-                                        <button
-                                            className="next-step-button view-all"
-                                            onClick={() => {
-                                                setShowWalletCreation(false);
-                                                setWalletCreated(false);
-                                            }}
-                                        >
-                                            View All {availableCryptocurrencies.length} Cryptocurrencies
-                                        </button>
-                                    )}
-                                </div>
-                            </div>
-
                             <div className="wallet-confirmation-actions">
                                 <button
                                     className="wallet-button primary"
@@ -922,23 +967,6 @@ function Assets() {
                                     Create Another Wallet
                                 </button>
                             </div>
-
-                            {addressGenerationStatus && addressGenerationStatus.walletId === walletData.wallet_id && (
-                                <div className={`address-generation-status ${addressGenerationStatus.success ? 'success' : 'error'}`}>
-                                    <p>{addressGenerationStatus.message}</p>
-                                    {addressGenerationStatus.success && addressGenerationStatus.address && (
-                                        <div className="generated-address">
-                                            {addressGenerationStatus.address}
-                                            <button
-                                                className="copy-address-btn"
-                                                onClick={() => navigator.clipboard.writeText(addressGenerationStatus.address)}
-                                            >
-                                                Copy
-                                            </button>
-                                        </div>
-                                    )}
-                                </div>
-                            )}
                         </div>
                     )}
 

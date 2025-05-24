@@ -258,6 +258,8 @@ pub struct WalletBalance {
     pub cryptocurrency: String,
     pub balance: BigDecimal,
     pub last_updated: chrono::NaiveDateTime,
+    pub usd_value: Option<BigDecimal>, // New field
+    pub last_price: Option<BigDecimal>, // New field
 }
 
 #[derive(Insertable, Debug)]
@@ -266,6 +268,8 @@ pub struct NewWalletBalance {
     pub wallet_id: i64,
     pub cryptocurrency: String,
     pub balance: BigDecimal,
+    pub usd_value: Option<BigDecimal>, // New field
+    pub last_price: Option<BigDecimal>, // New field
 }
 
 // Wallet response DTO with cryptocurrency addresses and balances
@@ -293,6 +297,8 @@ pub struct WalletBalanceResponse {
     pub cryptocurrency: String,
     pub balance: String,
     pub last_updated: chrono::NaiveDateTime,
+    pub usd_value: Option<String>, // New field
+    pub last_price: Option<String>, // New field
 }
 
 // Request model for creating a new wallet
@@ -338,4 +344,72 @@ pub struct CryptocurrencyResponse {
     pub name: String,
     pub icon_url: Option<String>,
     pub is_active: bool,
+}
+
+// Transaction model matching the database schema
+#[derive(Queryable, Serialize, Debug)]
+pub struct Transaction {
+    pub id: i32,
+    pub user_id: i32,
+    pub wallet_id: i64,
+    pub amount: BigDecimal,
+    pub cryptocurrency: String,
+    pub transaction_type: String,
+    pub transaction_hash: String,
+    pub status: String,
+    pub blockchain: Option<String>,
+    pub address: Option<String>,
+    pub fee: Option<BigDecimal>,
+    pub created_at: chrono::NaiveDateTime,
+    pub updated_at: chrono::NaiveDateTime,
+}
+
+// For inserting new transactions
+#[derive(Insertable, Debug)]
+#[diesel(table_name = crate::schema::transactions)]
+pub struct NewTransaction {
+    pub user_id: i32,
+    pub wallet_id: i64,
+    pub amount: BigDecimal,
+    pub cryptocurrency: String,
+    pub transaction_type: String,
+    pub transaction_hash: String,
+    pub status: String,
+    pub blockchain: Option<String>,
+    pub address: Option<String>,
+    pub fee: Option<BigDecimal>,
+}
+
+// Response DTO for transaction history
+#[derive(Serialize)]
+pub struct TransactionResponse {
+    pub id: i32,
+    pub wallet_id: i64,
+    pub amount: String,
+    pub cryptocurrency: String,
+    pub transaction_type: String,
+    pub transaction_hash: String,
+    pub status: String,
+    pub blockchain: Option<String>,
+    pub address: Option<String>,
+    pub fee: Option<String>,
+    pub created_at: chrono::NaiveDateTime,
+}
+
+impl From<Transaction> for TransactionResponse {
+    fn from(tx: Transaction) -> Self {
+        TransactionResponse {
+            id: tx.id,
+            wallet_id: tx.wallet_id,
+            amount: tx.amount.to_string(),
+            cryptocurrency: tx.cryptocurrency,
+            transaction_type: tx.transaction_type,
+            transaction_hash: tx.transaction_hash,
+            status: tx.status,
+            blockchain: tx.blockchain,
+            address: tx.address,
+            fee: tx.fee.map(|f| f.to_string()),
+            created_at: tx.created_at,
+        }
+    }
 }

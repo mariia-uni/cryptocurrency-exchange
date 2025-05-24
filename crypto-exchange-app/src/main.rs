@@ -22,11 +22,14 @@ use uuid::Uuid;
 
 pub mod auth;
 pub mod db;
+pub mod deposits; // Add this new module
 pub mod email;
 pub mod markets;
 pub mod models;
 pub mod schema; // Add the markets module
 pub mod wallets; // Add this line
+pub mod transactions; // Add this to your imports
+pub mod pricing; // Add this to your module declarations
 
 use argon2::{
     Argon2,
@@ -1380,6 +1383,12 @@ async fn main() -> std::io::Result<()> {
         }
     });
 
+    // Initialize pricing module
+    match pricing::init().await {
+        Ok(_) => info!("Pricing module initialized successfully"),
+        Err(e) => error!("Failed to initialize pricing module: {}", e),
+    }
+
     // Now start the HTTP server with the original pool
     HttpServer::new(move || {
         let cors = Cors::default()
@@ -1435,7 +1444,9 @@ async fn main() -> std::io::Result<()> {
             )
             .service(markets::get_markets) // Add the markets endpoint
             .service(markets::get_cryptocurrencies) // New endpoint
+            .configure(transactions::configure_routes) // Add transaction routes
             .service(wallet_scope) // Keep only this wallet registration
+            .configure(deposits::configure_routes) // Add the deposit routes
     })
     .bind(format!("{}:{}", host, port))?
     .run()

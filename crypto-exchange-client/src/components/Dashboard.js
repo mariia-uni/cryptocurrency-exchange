@@ -306,13 +306,13 @@ function Dashboard() {
                             <span className="nav-icon">💱</span>
                             <span className="nav-text">Markets</span>
                         </li>
-                        <li className="nav-item" onClick={() => navigate('/assets')}>
+                        <li className="nav-item" onClick={() => navigate('/assets-overview')}>
                             <span className="nav-icon">💎</span>
                             <span className="nav-text">Assets</span>
                         </li>
-                        <li className="nav-item">
+                        <li className="nav-item" onClick={() => navigate('/deposit')}>
                             <span className="nav-icon">💰</span>
-                            <span className="nav-text">Trade</span>
+                            <span className="nav-text">Deposit</span>
                         </li>
                         <li className="nav-item" onClick={() => navigate('/settings')}>
                             <span className="nav-icon">👤</span>

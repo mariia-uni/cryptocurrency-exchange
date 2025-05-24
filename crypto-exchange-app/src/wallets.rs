@@ -5,6 +5,7 @@ use crate::models::{
     NewWalletBalance, Wallet, WalletAddress, WalletAddressResponse, WalletBalance,
     WalletBalanceResponse, WalletResponseWithAddresses,
 };
+use crate::pricing;
 use crate::schema::{wallet_addresses, wallet_balances, wallets};
 use actix_web::{HttpRequest, HttpResponse, get, post, web};
 use bigdecimal::BigDecimal;
@@ -260,6 +261,8 @@ pub async fn generate_address(
         wallet_id,
         cryptocurrency: cryptocurrency.clone(),
         balance: BigDecimal::from_str("0").unwrap(),
+        usd_value: None,  // Initially zero USD value
+        last_price: None, // No price initially
     };
 
     let _ = web::block(move || {
@@ -380,6 +383,8 @@ pub async fn get_wallet(
             cryptocurrency: bal.cryptocurrency,
             balance: bal.balance.to_string(),
             last_updated: bal.last_updated,
+            usd_value: bal.usd_value.as_ref().map(|val| val.to_string()),
+            last_price: bal.last_price.as_ref().map(|price| price.to_string()),
         })
         .collect();
 
@@ -457,6 +462,8 @@ pub async fn list_wallets(
                             cryptocurrency: balance.cryptocurrency.clone(),
                             balance: balance.balance.to_string(),
                             last_updated: balance.last_updated,
+                            usd_value: balance.usd_value.as_ref().map(|val| val.to_string()),
+                            last_price: balance.last_price.as_ref().map(|price| price.to_string()),
                         });
                     } else {
                         // Create zero balance entry
@@ -464,6 +471,8 @@ pub async fn list_wallets(
                             cryptocurrency: crypto.symbol.clone(),
                             balance: "0".to_string(),
                             last_updated: chrono::NaiveDateTime::from_timestamp_opt(0, 0).unwrap(),
+                            usd_value: None,  // No USD value for zero balance
+                            last_price: None, // No price for zero balance
                         });
                     }
                 }
@@ -632,10 +641,29 @@ pub async fn update_balance(
                         amount.clone()
                     };
 
+                    // Create a price future and execute it in the blocking context
+                    let crypto_clone = cryptocurrency_inner.clone();
+                    let price_future = pricing::get_current_price(&crypto_clone);
+                    let price = match tokio::runtime::Handle::current().block_on(price_future) {
+                        Ok(p) => {
+                            let price_decimal = BigDecimal::from_str(&p.to_string()).unwrap_or_else(|_| BigDecimal::from_str("0").unwrap());
+                            Some(price_decimal)
+                        },
+                        Err(_) => None,
+                    };
+
+                    // Calculate USD value if price is available
+                    let usd_value = match &price {
+                        Some(p) => Some(&new_balance * p),
+                        None => None,
+                    };
+
                     let new_balance_record = NewWalletBalance {
                         wallet_id: wallet_id_inner,
                         cryptocurrency: cryptocurrency_inner.clone(),
                         balance: new_balance,
+                        usd_value,
+                        last_price: price,
                     };
 
                     diesel::insert_into(wallet_balances::table)
@@ -657,7 +685,9 @@ pub async fn update_balance(
             "balance": {
                 "cryptocurrency": updated_balance.cryptocurrency,
                 "balance": updated_balance.balance.to_string(),
-                "last_updated": updated_balance.last_updated
+                "last_updated": updated_balance.last_updated,
+                "usd_value": updated_balance.usd_value.as_ref().map(|val| val.to_string()),
+                "last_price": updated_balance.last_price.as_ref().map(|price| price.to_string())
             }
         }))),
         Err(_) => {

@@ -1,0 +1,617 @@
+/* Import shared styles */
+@import './Assets.css';
+
+/* Deposit Container */
+.deposit-container {
+    background-color: #1a1f2a;
+    border-radius: 12px;
+    padding: 30px;
+    margin-bottom: 30px;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+    border: 1px solid #2e3444;
+    max-width: 900px;
+    margin-left: auto;
+    margin-right: auto;
+}
+
+.deposit-container h2 {
+    font-size: 28px;
+    color: #ffffff;
+    margin-bottom: 30px;
+    text-align: center;
+}
+
+/* Form Sections */
+.form-section {
+    margin-bottom: 30px;
+}
+
+.form-section h3 {
+    font-size: 18px;
+    color: #f0b90b;
+    margin-bottom: 15px;
+    display: flex;
+    align-items: center;
+}
+
+/* Wallet Selector */
+.wallet-selector select {
+    width: 100%;
+    padding: 12px;
+    background-color: #2e3444;
+    color: #ffffff;
+    border: 1px solid #3d4559;
+    border-radius: 6px;
+    font-size: 16px;
+    appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23f0b90b' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 12px center;
+    cursor: pointer;
+}
+
+/* Cryptocurrency Selector */
+.crypto-selector {
+    margin-bottom: 20px;
+}
+
+.crypto-options {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+    gap: 12px;
+}
+
+.crypto-option {
+    background-color: #2e3444;
+    border: 1px solid #3d4559;
+    border-radius: 8px;
+    padding: 15px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.crypto-option:hover {
+    background-color: #3d4559;
+    transform: translateY(-2px);
+}
+
+.crypto-option.selected {
+    background-color: rgba(240, 185, 11, 0.15);
+    border-color: #f0b90b;
+}
+
+.crypto-icon {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    background-color: #1a1f2a;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+}
+
+.crypto-icon img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.crypto-icon span {
+    color: #f0b90b;
+    font-weight: bold;
+    font-size: 16px;
+}
+
+.crypto-info {
+    flex: 1;
+}
+
+.crypto-symbol {
+    font-weight: 600;
+    color: #ffffff;
+    font-size: 16px;
+}
+
+.crypto-name {
+    color: #b0b0b0;
+    font-size: 12px;
+    margin-top: 2px;
+}
+
+/* Blockchain Selector */
+.blockchain-selector {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.blockchain-option {
+    background-color: #2e3444;
+    border: 1px solid #3d4559;
+    border-radius: 8px;
+    padding: 15px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.blockchain-option:hover {
+    background-color: #3d4559;
+}
+
+.blockchain-option.selected {
+    background-color: rgba(240, 185, 11, 0.15);
+    border-color: #f0b90b;
+}
+
+.blockchain-name {
+    font-weight: 600;
+    color: #ffffff;
+    font-size: 16px;
+    margin-bottom: 5px;
+}
+
+.blockchain-fee {
+    color: #b0b0b0;
+    font-size: 14px;
+}
+
+.blockchain-selected-icon {
+    color: #f0b90b;
+    font-size: 20px;
+    font-weight: bold;
+}
+
+/* Address Selector */
+.address-selector select {
+    width: 100%;
+    padding: 12px;
+    background-color: #2e3444;
+    color: #ffffff;
+    border: 1px solid #3d4559;
+    border-radius: 6px;
+    font-size: 16px;
+    margin-bottom: 15px;
+    appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23f0b90b' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 12px center;
+    cursor: pointer;
+}
+
+.address-display {
+    background-color: #2a3144;
+    border-radius: 8px;
+    padding: 15px;
+    margin-top: 10px;
+}
+
+.address-label {
+    color: #b0b0b0;
+    font-size: 14px;
+    margin-bottom: 8px;
+}
+
+.address-value {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.address-text {
+    font-family: monospace;
+    color: #ffffff;
+    background-color: #1a1f2a;
+    padding: 10px;
+    border-radius: 4px;
+    font-size: 14px;
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.copy-button {
+    background-color: #f0b90b;
+    color: #1a1f2a;
+    border: none;
+    border-radius: 4px;
+    padding: 8px 15px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background-color 0.2s;
+}
+
+.copy-button:hover {
+    background-color: #f8d12f;
+}
+
+.no-address-message {
+    background-color: #2a3144;
+    border-radius: 8px;
+    padding: 20px;
+    text-align: center;
+}
+
+.no-address-message p {
+    color: #b0b0b0;
+    margin-bottom: 15px;
+}
+
+.generate-address-button {
+    background-color: #f0b90b;
+    color: #1a1f2a;
+    border: none;
+    border-radius: 6px;
+    padding: 10px 20px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background-color 0.2s;
+}
+
+.generate-address-button:hover:not(:disabled) {
+    background-color: #f8d12f;
+}
+
+.generate-address-button:disabled {
+    background-color: #5d5634;
+    cursor: not-allowed;
+}
+
+/* Deposit Amount Input */
+.deposit-amount-input {
+    position: relative;
+    margin-bottom: 20px;
+    max-width: 300px; /* Limit the max width */
+    width: 100%; /* Take full width up to max-width */
+}
+
+.deposit-amount-input input {
+    width: 100%;
+    padding: 12px;
+    background-color: #2e3444;
+    color: #ffffff;
+    border: 1px solid #3d4559;
+    border-radius: 6px;
+    font-size: 18px;
+    padding-right: 80px; /* Make room for the suffix */
+}
+
+.currency-suffix {
+    position: absolute;
+    right: 12px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: #b0b0b0;
+    font-size: 16px;
+    pointer-events: none;
+}
+
+/* Deposit Notice */
+.deposit-notice {
+    background-color: rgba(240, 185, 11, 0.1);
+    border: 1px solid rgba(240, 185, 11, 0.3);
+    border-radius: 8px;
+    padding: 15px;
+    display: flex;
+    margin-bottom: 25px;
+    gap: 15px;
+}
+
+.notice-icon {
+    font-size: 24px;
+    margin-top: 3px;
+}
+
+.notice-content {
+    flex: 1;
+}
+
+.notice-title {
+    font-weight: bold;
+    color: #f0b90b;
+    margin-bottom: 10px;
+}
+
+.notice-content p {
+    color: #d4d4d4;
+    font-size: 14px;
+    margin-bottom: 10px;
+}
+
+.notice-content p:last-child {
+    margin-bottom: 0;
+}
+
+/* Confirmation Checkbox */
+.deposit-confirmation {
+    margin-bottom: 25px;
+}
+
+.confirmation-checkbox {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    cursor: pointer;
+}
+
+.confirmation-checkbox input {
+    margin-top: 4px;
+    accent-color: #f0b90b;
+    cursor: pointer;
+    width: 16px;
+    height: 16px;
+}
+
+.confirmation-checkbox span {
+    color: #d4d4d4;
+    font-size: 14px;
+    line-height: 1.5;
+}
+
+/* Form Actions */
+.deposit-form-actions {
+    text-align: center;
+}
+
+.deposit-button {
+    padding: 12px 24px;
+    border-radius: 6px;
+    font-weight: 600;
+    font-size: 16px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    border: none;
+}
+
+.deposit-button.primary {
+    background-color: #f0b90b;
+    color: #1a1f2a;
+}
+
+.deposit-button.primary:hover:not(:disabled) {
+    background-color: #f8d12f;
+}
+
+.deposit-button.primary:disabled {
+    background-color: #5d5634;
+    cursor: not-allowed;
+    opacity: 0.7;
+}
+
+.deposit-button.secondary {
+    background-color: #2e3444;
+    color: #f0b90b;
+    border: 1px solid #f0b90b;
+    margin-left: 10px;
+}
+
+.deposit-button.secondary:hover {
+    background-color: rgba(240, 185, 11, 0.1);
+}
+
+/* No Wallets Message */
+.no-wallets-message {
+    text-align: center;
+    padding: 40px 20px;
+    background-color: #2e3444;
+    border-radius: 8px;
+}
+
+.no-wallets-message p {
+    color: #b0b0b0;
+    margin-bottom: 20px;
+}
+
+/* Deposit Result */
+.deposit-result {
+    text-align: center;
+    padding: 30px;
+    border-radius: 8px;
+    max-width: 600px;
+    margin: 0 auto;
+}
+
+.deposit-result.success {
+    background-color: rgba(39, 174, 96, 0.1);
+    border: 1px solid rgba(39, 174, 96, 0.3);
+}
+
+.deposit-result.error {
+    background-color: rgba(231, 76, 60, 0.1);
+    border: 1px solid rgba(231, 76, 60, 0.3);
+}
+
+.deposit-result-icon {
+    font-size: 48px;
+    margin-bottom: 20px;
+}
+
+.deposit-result.success .deposit-result-icon {
+    color: #27ae60;
+}
+
+.deposit-result.error .deposit-result-icon {
+    color: #e74c3c;
+}
+
+.deposit-result h3 {
+    font-size: 24px;
+    margin-bottom: 15px;
+    color: #ffffff;
+}
+
+.deposit-result p {
+    color: #b0b0b0;
+    margin-bottom: 20px;
+}
+
+.deposit-details {
+    background-color: #2a3144;
+    border-radius: 8px;
+    padding: 20px;
+    margin-bottom: 25px;
+}
+
+.deposit-detail {
+    display: flex;
+    justify-content: space-between;
+    padding: 10px 0;
+    border-bottom: 1px solid #3d4559;
+}
+
+.deposit-detail:last-child {
+    border-bottom: none;
+}
+
+.deposit-detail span {
+    color: #b0b0b0;
+}
+
+.deposit-detail strong {
+    color: #ffffff;
+    font-family: monospace;
+}
+
+.deposit-actions {
+    margin-top: 20px;
+    display: flex;
+    justify-content: center;
+    gap: 15px;
+}
+
+/* Add these styles for the cryptocurrency dropdown */
+
+.crypto-dropdown-container {
+    position: relative;
+    width: 100%;
+}
+
+.crypto-search {
+    margin-bottom: 10px;
+}
+
+.crypto-search-input {
+    width: 100%;
+    padding: 12px;
+    background-color: #2e3444;
+    color: #ffffff;
+    border: 1px solid #3d4559;
+    border-radius: 6px;
+    font-size: 16px;
+}
+
+.crypto-dropdown-selected {
+    padding: 12px 15px;
+    background-color: #2e3444;
+    border: 1px solid #3d4559;
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.crypto-dropdown-selected:hover {
+    background-color: #3d4559;
+}
+
+.selected-crypto-info {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.no-selection {
+    color: #8a8a8a;
+}
+
+.dropdown-arrow {
+    color: #f0b90b;
+    font-size: 12px;
+    transition: transform 0.2s;
+}
+
+.crypto-dropdown-options {
+    position: absolute;
+    top: calc(100% + 5px);
+    left: 0;
+    width: 100%;
+    background-color: #2e3444;
+    border: 1px solid #3d4559;
+    border-radius: 6px;
+    max-height: 280px;
+    overflow-y: auto;
+    z-index: 100;
+    box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
+}
+
+.crypto-dropdown-options .crypto-option {
+    padding: 12px 15px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    cursor: pointer;
+    border-bottom: 1px solid rgba(61, 69, 89, 0.5);
+}
+
+.crypto-dropdown-options .crypto-option:last-child {
+    border-bottom: none;
+}
+
+.crypto-dropdown-options .crypto-option:hover {
+    background-color: #3d4559;
+}
+
+.crypto-dropdown-options .crypto-option.selected {
+    background-color: rgba(240, 185, 11, 0.15);
+}
+
+.crypto-dropdown-options .no-results {
+    padding: 15px;
+    text-align: center;
+    color: #8a8a8a;
+}
+
+/* Improved scrollbar for dropdown */
+.crypto-dropdown-options::-webkit-scrollbar {
+    width: 8px;
+}
+
+.crypto-dropdown-options::-webkit-scrollbar-track {
+    background: #1a1f2a;
+    border-radius: 0 6px 6px 0;
+}
+
+.crypto-dropdown-options::-webkit-scrollbar-thumb {
+    background: #3d4559;
+    border-radius: 10px;
+}
+
+.crypto-dropdown-options::-webkit-scrollbar-thumb:hover {
+    background: #4d5569;
+}
+
+/* Mobile responsiveness */
+@media (max-width: 480px) {
+    .selected-crypto-info {
+        max-width: 80%;
+    }
+    
+    .crypto-details {
+        max-width: 70%;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+    
+    .deposit-amount-input {
+        max-width: 100%; /* On very small screens, use full width */
+    }
+}

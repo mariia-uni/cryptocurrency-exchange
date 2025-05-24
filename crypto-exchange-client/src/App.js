@@ -16,6 +16,8 @@ import Settings from './components/Settings';
 import ResetPassword from './components/ResetPassword';
 import Markets from './components/Markets';
 import Assets from './components/Assets';
+import AssetsOverview from './components/AssetsOverview';
+import Deposit from './components/Deposit';
 import './App.css';
 
 const ProtectedRoute = ({ children }) => {
@@ -57,8 +59,10 @@ function App() {
         <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
         <Route path="/markets" element={<Markets />} />
         <Route path="/assets" element={<ProtectedRoute><Assets /></ProtectedRoute>} />
+        <Route path="/assets-overview" element={<AssetsOverview />} />
         <Route path="/settings" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
         <Route path="/reset-password" element={<ResetPassword />} />
+        <Route path="/deposit" element={<Deposit />} />
 
         {/* Admin routes */}
         <Route path="/admin" element={<AdminRoute><AdminPanel /></AdminRoute>} />
