@@ -84,6 +84,12 @@ function VerifyIdentity() {
 
                         // Store verification status to show appropriate UI
                         setVerificationStatus(data.status);
+
+                        // If verification has been submitted (status is not "not_submitted"), redirect to dashboard
+                        if (data.status !== 'not_submitted') {
+                            navigate('/dashboard');
+                            return;
+                        }
                     }
                     // If status is "not_submitted", we'll just show the empty form
                 } else {

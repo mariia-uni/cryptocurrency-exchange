@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import './Settings.css';
+import SearchBox from './SearchBox/SearchBox';
 
 function Settings() {
     const navigate = useNavigate();
@@ -170,9 +171,7 @@ function Settings() {
             <header className="dashboard-header">
                 <div className="logo">CryptoX</div>
                 <div className="header-actions">
-                    <div className="search-container">
-                        <input type="text" placeholder="Search..." className="search-input" />
-                    </div>
+                    <SearchBox />
                     <button className="deposit-button">Deposit</button>
 
                     {/* Admin button - only visible for admin users */}

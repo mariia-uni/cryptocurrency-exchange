@@ -3,6 +3,7 @@ import { useNavigate, Link } from 'react-router-dom';
 import './Assets.css';
 import { createSynchronizedInterval, clearSynchronizedInterval } from '../utils/refreshUtils';
 import RefreshIndicator from './RefreshIndicator';
+import SearchBox from './SearchBox/SearchBox';
 
 function Assets() {
     const navigate = useNavigate();
@@ -763,13 +764,11 @@ function Assets() {
             <header className="dashboard-header">
                 <div className="logo">CryptoX</div>
                 <div className="header-actions">
-                    <div className="search-container">
-                        <input type="text" placeholder="Search..." className="search-input" />
-                        <RefreshIndicator
-                            lastRefreshTime={lastRefreshTime}
-                            isRefreshing={isRefreshing}
-                        />
-                    </div>
+                    <SearchBox />
+                    <RefreshIndicator
+                        lastRefreshTime={lastRefreshTime}
+                        isRefreshing={isRefreshing}
+                    />
 
                     <button className="deposit-button">Deposit</button>
 

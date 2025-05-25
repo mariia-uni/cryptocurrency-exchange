@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import './Deposit.css';
+import SearchBox from './SearchBox/SearchBox';
 
 function Deposit() {
     const navigate = useNavigate();
@@ -8,7 +9,7 @@ function Deposit() {
     const [isLoading, setIsLoading] = useState(true);
     const [isAdmin, setIsAdmin] = useState(false);
     const [apiError, setApiError] = useState('');
-    
+
     // Deposit state
     const [wallets, setWallets] = useState([]);
     const [selectedWallet, setSelectedWallet] = useState(null);
@@ -161,7 +162,7 @@ function Deposit() {
                         ];
                 }
             };
-            
+
             const blockchainOptions = getBlockchains(selectedCrypto);
             setBlockchains(blockchainOptions);
             if (blockchainOptions.length > 0) {
@@ -177,7 +178,7 @@ function Deposit() {
             const addresses = selectedWallet.addresses
                 ? selectedWallet.addresses.filter(addr => addr.cryptocurrency === selectedCrypto)
                 : [];
-            
+
             setWalletAddresses(addresses);
             if (addresses.length > 0) {
                 setSelectedAddress(addresses[0].address);
@@ -186,7 +187,7 @@ function Deposit() {
             }
         }
     }, [selectedWallet, selectedCrypto]);
-    
+
     // Move this useEffect inside the component, before filteredCryptocurrencies
     useEffect(() => {
         const handleClickOutside = (event) => {
@@ -201,13 +202,13 @@ function Deposit() {
             document.removeEventListener('mousedown', handleClickOutside);
         };
     }, []);
-    
+
     // Function to generate a cryptocurrency address
     const generateAddress = async () => {
         if (!selectedWallet || !selectedCrypto) return;
-        
+
         setIsGeneratingAddress(true);
-        
+
         try {
             const token = localStorage.getItem('auth_token');
             const response = await fetch('http://localhost:8080/wallet/address/generate', {
@@ -221,7 +222,7 @@ function Deposit() {
                     cryptocurrency: selectedCrypto
                 })
             });
-            
+
             if (response.ok) {
                 const data = await response.json();
                 if (data.address) {
@@ -232,7 +233,7 @@ function Deposit() {
                             'Content-Type': 'application/json',
                         },
                     });
-                    
+
                     if (walletsResponse.ok) {
                         const walletsData = await walletsResponse.json();
                         if (walletsData.wallets && Array.isArray(walletsData.wallets)) {
@@ -247,7 +248,7 @@ function Deposit() {
                                 const addresses = updatedWallet.addresses
                                     ? updatedWallet.addresses.filter(addr => addr.cryptocurrency === selectedCrypto)
                                     : [];
-                                
+
                                 setWalletAddresses(addresses);
                                 if (addresses.length > 0) {
                                     setSelectedAddress(addresses[0].address);
@@ -267,15 +268,15 @@ function Deposit() {
             setIsGeneratingAddress(false);
         }
     };
-    
+
     // Function to process a deposit
     const processDeposit = async () => {
         if (!selectedWallet || !selectedCrypto || !selectedAddress || !hasConfirmed) {
             return;
         }
-        
+
         setIsProcessingDeposit(true);
-        
+
         try {
             const token = localStorage.getItem('auth_token');
             const response = await fetch('http://localhost:8080/deposit/process', {
@@ -293,9 +294,9 @@ function Deposit() {
                     confirmation_token: "confirmed_by_user" // This would be more secure in a real app
                 })
             });
-            
+
             const data = await response.json();
-            
+
             if (response.ok) {
                 setDepositStatus({
                     success: true,
@@ -303,7 +304,7 @@ function Deposit() {
                     transaction_id: data.transaction_id,
                     new_balance: data.new_balance
                 });
-                
+
                 // Refresh wallet data after successful deposit
                 const walletsResponse = await fetch('http://localhost:8080/wallet/list', {
                     headers: {
@@ -311,7 +312,7 @@ function Deposit() {
                         'Content-Type': 'application/json',
                     },
                 });
-                
+
                 if (walletsResponse.ok) {
                     const walletsData = await walletsResponse.json();
                     if (walletsData.wallets && Array.isArray(walletsData.wallets)) {
@@ -334,30 +335,28 @@ function Deposit() {
             setIsProcessingDeposit(false);
         }
     };
-    
+
     // Reset deposit form
     const resetDepositForm = () => {
         setDepositStatus(null);
         setHasConfirmed(false);
     };
-    
-    const filteredCryptocurrencies = availableCryptocurrencies.filter(crypto => 
-        crypto.name.toLowerCase().includes(cryptoSearchQuery.toLowerCase()) || 
+
+    const filteredCryptocurrencies = availableCryptocurrencies.filter(crypto =>
+        crypto.name.toLowerCase().includes(cryptoSearchQuery.toLowerCase()) ||
         crypto.symbol.toLowerCase().includes(cryptoSearchQuery.toLowerCase())
     );
-    
+
     if (isLoading) {
         return <div className="loading-container">Loading deposit options...</div>;
     }
-    
+
     return (
         <div className="dashboard-container">
             <header className="dashboard-header">
                 <div className="logo">CryptoX</div>
                 <div className="header-actions">
-                    <div className="search-container">
-                        <input type="text" placeholder="Search..." className="search-input" />
-                    </div>
+                    <SearchBox />
 
                     <button className="deposit-button">Deposit</button>
 
@@ -431,7 +430,7 @@ function Deposit() {
                 <main className="main-content">
                     <div className="deposit-container">
                         <h2>Deposit Funds</h2>
-                        
+
                         {depositStatus ? (
                             <div className={`deposit-result ${depositStatus.success ? 'success' : 'error'}`}>
                                 <div className="deposit-result-icon">
@@ -439,7 +438,7 @@ function Deposit() {
                                 </div>
                                 <h3>{depositStatus.success ? 'Deposit Successful!' : 'Deposit Failed'}</h3>
                                 <p>{depositStatus.message}</p>
-                                
+
                                 {depositStatus.success && (
                                     <div className="deposit-details">
                                         <div className="deposit-detail">
@@ -452,9 +451,9 @@ function Deposit() {
                                         </div>
                                     </div>
                                 )}
-                                
+
                                 <div className="deposit-actions">
-                                    <button 
+                                    <button
                                         className="deposit-button primary"
                                         onClick={() => navigate('/assets-overview')}
                                     >
@@ -473,7 +472,7 @@ function Deposit() {
                                 {wallets.length === 0 ? (
                                     <div className="no-wallets-message">
                                         <p>You don't have any wallets yet. Create a wallet first to make a deposit.</p>
-                                        <button 
+                                        <button
                                             className="deposit-button primary"
                                             onClick={() => navigate('/assets')}
                                         >
@@ -485,8 +484,8 @@ function Deposit() {
                                         <div className="form-section">
                                             <h3>1. Select Wallet</h3>
                                             <div className="wallet-selector">
-                                                <select 
-                                                    value={selectedWallet?.wallet_id || ''} 
+                                                <select
+                                                    value={selectedWallet?.wallet_id || ''}
                                                     onChange={(e) => {
                                                         const wallet = wallets.find(w => w.wallet_id.toString() === e.target.value);
                                                         setSelectedWallet(wallet);
@@ -514,16 +513,16 @@ function Deposit() {
                                                         className="crypto-search-input"
                                                     />
                                                 </div>
-                                                
+
                                                 <div className="crypto-dropdown-selected" onClick={() => setDropdownOpen(!dropdownOpen)}>
                                                     {selectedCrypto ? (
                                                         <>
                                                             <div className="selected-crypto-info">
                                                                 <div className="crypto-icon">
                                                                     {availableCryptocurrencies.find(c => c.symbol === selectedCrypto)?.icon_url ? (
-                                                                        <img 
-                                                                            src={availableCryptocurrencies.find(c => c.symbol === selectedCrypto)?.icon_url} 
-                                                                            alt={selectedCrypto} 
+                                                                        <img
+                                                                            src={availableCryptocurrencies.find(c => c.symbol === selectedCrypto)?.icon_url}
+                                                                            alt={selectedCrypto}
                                                                         />
                                                                     ) : (
                                                                         <span>{selectedCrypto.charAt(0)}</span>
@@ -542,12 +541,12 @@ function Deposit() {
                                                         <div className="no-selection">Select a cryptocurrency</div>
                                                     )}
                                                 </div>
-                                                
+
                                                 {dropdownOpen && (
                                                     <div className="crypto-dropdown-options">
                                                         {filteredCryptocurrencies.length > 0 ? (
                                                             filteredCryptocurrencies.map(crypto => (
-                                                                <div 
+                                                                <div
                                                                     key={crypto.symbol}
                                                                     className={`crypto-option ${selectedCrypto === crypto.symbol ? 'selected' : ''}`}
                                                                     onClick={() => {
@@ -581,7 +580,7 @@ function Deposit() {
                                             <h3>3. Select Network</h3>
                                             <div className="blockchain-selector">
                                                 {blockchains.map(blockchain => (
-                                                    <div 
+                                                    <div
                                                         key={blockchain.id}
                                                         className={`blockchain-option ${selectedBlockchain === blockchain.id ? 'selected' : ''}`}
                                                         onClick={() => setSelectedBlockchain(blockchain.id)}
@@ -612,12 +611,12 @@ function Deposit() {
                                                             </option>
                                                         ))}
                                                     </select>
-                                                    
+
                                                     <div className="address-display">
                                                         <div className="address-label">Deposit Address:</div>
                                                         <div className="address-value">
                                                             <span className="address-text">{selectedAddress}</span>
-                                                            <button 
+                                                            <button
                                                                 className="copy-button"
                                                                 onClick={() => {
                                                                     navigator.clipboard.writeText(selectedAddress);
@@ -632,7 +631,7 @@ function Deposit() {
                                             ) : (
                                                 <div className="no-address-message">
                                                     <p>No address found for {selectedCrypto}. Generate one to continue.</p>
-                                                    <button 
+                                                    <button
                                                         className="generate-address-button"
                                                         onClick={generateAddress}
                                                         disabled={isGeneratingAddress}

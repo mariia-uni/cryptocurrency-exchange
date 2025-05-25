@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import './Dashboard.css';
+import SearchBox from './SearchBox/SearchBox';
 
 function Dashboard() {
     const navigate = useNavigate();
@@ -247,12 +248,7 @@ function Dashboard() {
             <header className="dashboard-header">
                 <div className="logo">CryptoX</div>
                 <div className="header-actions">
-                    {/* Move search to a separate div with less priority */}
-                    <div className="search-container">
-                        <input type="text" placeholder="Search..." className="search-input" />
-                    </div>
-
-                    {/* Make sure deposit button has clear spacing */}
+                    <SearchBox />
                     <button className="deposit-button">Deposit</button>
 
                     {/* Admin button - only visible for admin users */}
@@ -380,7 +376,7 @@ function Dashboard() {
                         </div>
 
                         <div className="profile-actions">
-                            <button className="profile-action-button" onClick={() => navigate('/account')}>
+                            <button className="profile-action-button" onClick={() => navigate('/settings')}>
                                 Manage Account
                             </button>
                             {!isVerified && (
@@ -452,7 +448,11 @@ function Dashboard() {
                                 </div>
                                 <h4>Make Deposit</h4>
                                 <p>Fund your account easily on the CryptoX Web or App.</p>
-                                <button className="step-button" disabled={!isVerified}>
+                                <button
+                                    className="step-button"
+                                    disabled={!isVerified}
+                                    onClick={() => isVerified && navigate('/deposit')}
+                                >
                                     {isVerified ? "Deposit Now" : "Verification Required"}
                                 </button>
                             </div>

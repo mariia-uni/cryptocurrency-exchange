@@ -4,6 +4,7 @@ import { useNavigate, Link } from 'react-router-dom';
 import './Markets.css';
 import { createSynchronizedInterval, clearSynchronizedInterval } from '../utils/refreshUtils';
 import RefreshIndicator from './RefreshIndicator';
+import SearchBox from './SearchBox/SearchBox';
 
 const Markets = () => {
     const navigate = useNavigate();
@@ -221,9 +222,7 @@ const Markets = () => {
             <header className="dashboard-header">
                 <div className="logo">CryptoX</div>
                 <div className="header-actions">
-                    <div className="search-container">
-                        <input type="text" placeholder="Search..." className="search-input" />
-                    </div>
+                    <SearchBox />
                     <button className="deposit-button">Deposit</button>
                     <div className="user-profile">
                         {/* Updated username display to match Dashboard.js */}
