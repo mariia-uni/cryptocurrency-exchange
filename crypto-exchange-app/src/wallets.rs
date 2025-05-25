@@ -365,6 +365,34 @@ pub async fn get_wallet(
         actix_web::error::ErrorInternalServerError("Failed to load wallet balances")
     })?;
 
+    // Get cryptocurrencies to update the prices
+    let mut conn = pool
+        .get()
+        .map_err(|_| actix_web::error::ErrorInternalServerError("Database connection error"))?;
+
+    // Get all cryptocurrencies from the database to have access to their information
+    use crate::schema::cryptocurrencies::dsl as crypto_dsl;
+    let all_cryptocurrencies = web::block(move || {
+        crypto_dsl::cryptocurrencies
+            .filter(crypto_dsl::is_active.eq(true))
+            .load::<Cryptocurrency>(&mut conn)
+    })
+    .await
+    .map_err(|e| {
+        error!("Failed to load cryptocurrencies: {:?}", e);
+        actix_web::error::ErrorInternalServerError("Failed to load cryptocurrencies")
+    })?
+    .map_err(|e| {
+        error!("Database error loading cryptocurrencies: {:?}", e);
+        actix_web::error::ErrorInternalServerError("Database error loading cryptocurrencies")
+    })?;
+
+    // Construct cryptocurrency map for easy lookup
+    let crypto_map: std::collections::HashMap<String, &Cryptocurrency> = all_cryptocurrencies
+        .iter()
+        .map(|c| (c.symbol.clone(), c))
+        .collect();
+
     // Construct response
     let addresses_response: Vec<WalletAddressResponse> = addresses
         .unwrap_or_default()
@@ -376,15 +404,58 @@ pub async fn get_wallet(
         })
         .collect();
 
+    // Get a new connection for updating balances
+    let mut conn = pool
+        .get()
+        .map_err(|_| actix_web::error::ErrorInternalServerError("Database connection error"))?;
+
+    // Update balance USD values with latest prices
     let balances_response: Vec<WalletBalanceResponse> = balances
         .unwrap_or_default()
         .into_iter()
-        .map(|bal| WalletBalanceResponse {
-            cryptocurrency: bal.cryptocurrency,
-            balance: bal.balance.to_string(),
-            last_updated: bal.last_updated,
-            usd_value: bal.usd_value.as_ref().map(|val| val.to_string()),
-            last_price: bal.last_price.as_ref().map(|price| price.to_string()),
+        .map(|mut bal| {
+            // Only update USD values for non-zero balances
+            if bal.balance > BigDecimal::from(0) {
+                // Check if we have cryptocurrency info
+                if let Some(crypto) = crypto_map.get(&bal.cryptocurrency) {
+                    // Get the latest price
+                    let price_future = crate::pricing::get_current_price(&crypto.symbol);
+
+                    // Execute the future within this blocking context
+                    if let Ok(price) = tokio::runtime::Handle::current().block_on(price_future) {
+                        // Convert price to BigDecimal
+                        let price_decimal = BigDecimal::from_str(&price.to_string())
+                            .unwrap_or_else(|_| BigDecimal::from_str("0").unwrap());
+
+                        // Calculate current USD value based on latest price
+                        if price_decimal > BigDecimal::from(0) {
+                            let updated_usd_value = &bal.balance * &price_decimal;
+
+                            // Update the balance in the database with new USD value
+                            let _ = diesel::update(wallet_balances::table.find(bal.id))
+                                .set((
+                                    wallet_balances::usd_value.eq(&updated_usd_value),
+                                    wallet_balances::last_price.eq(&price_decimal),
+                                    wallet_balances::last_updated.eq(diesel::dsl::now),
+                                ))
+                                .execute(&mut conn);
+
+                            // Update the in-memory balance object
+                            bal.usd_value = Some(updated_usd_value);
+                            bal.last_price = Some(price_decimal);
+                        }
+                    }
+                }
+            }
+
+            // Convert to response DTO
+            WalletBalanceResponse {
+                cryptocurrency: bal.cryptocurrency,
+                balance: bal.balance.to_string(),
+                last_updated: bal.last_updated,
+                usd_value: bal.usd_value.as_ref().map(|val| val.to_string()),
+                last_price: bal.last_price.as_ref().map(|price| price.to_string()),
+            }
         })
         .collect();
 
@@ -411,12 +482,11 @@ pub async fn list_wallets(
     // Extract user_id from JWT token
     let user_id = auth::extract_user_id(&req)?;
 
-    // Query all wallets for this user with proper error handling
-    let mut conn = pool.get().map_err(|e| {
-        error!("Failed to get DB connection: {}", e);
-        actix_web::error::ErrorInternalServerError("Database connection error")
-    })?;
+    let mut conn = pool
+        .get()
+        .map_err(|_| actix_web::error::ErrorInternalServerError("Database connection error"))?;
 
+    // Process wallet data in a blocking thread
     let result = web::block(
         move || -> Result<Vec<WalletResponseWithAddresses>, diesel::result::Error> {
             // Get all cryptocurrencies from the database
@@ -457,14 +527,70 @@ pub async fn list_wallets(
                 for crypto in &all_cryptocurrencies {
                     // Check if we have a balance for this cryptocurrency
                     if let Some(balance) = balance_map.get(&crypto.symbol) {
-                        // Use existing balance
-                        balances_response.push(WalletBalanceResponse {
-                            cryptocurrency: balance.cryptocurrency.clone(),
-                            balance: balance.balance.to_string(),
-                            last_updated: balance.last_updated,
-                            usd_value: balance.usd_value.as_ref().map(|val| val.to_string()),
-                            last_price: balance.last_price.as_ref().map(|price| price.to_string()),
-                        });
+                        // Only update USD values for non-zero balances
+                        if balance.balance > BigDecimal::from(0) {
+                            // Get the latest price
+                            let price_future = crate::pricing::get_current_price(&crypto.symbol);
+
+                            // Execute the future within this blocking context
+                            let current_price = match tokio::runtime::Handle::current()
+                                .block_on(price_future)
+                            {
+                                Ok(price) => {
+                                    // Convert price to BigDecimal
+                                    let price_decimal = BigDecimal::from_str(&price.to_string())
+                                        .unwrap_or_else(|_| BigDecimal::from_str("0").unwrap());
+
+                                    // Calculate current USD value based on latest price
+                                    let updated_usd_value = if price_decimal > BigDecimal::from(0) {
+                                        Some(&balance.balance * &price_decimal)
+                                    } else {
+                                        balance.usd_value.clone()
+                                    };
+
+                                    // Update the balance in the database with new USD value
+                                    let balance_id = balance.id;
+                                    let _ = diesel::update(wallet_balances::table.find(balance_id))
+                                        .set((
+                                            wallet_balances::usd_value.eq(&updated_usd_value),
+                                            wallet_balances::last_price.eq(&price_decimal),
+                                            wallet_balances::last_updated.eq(diesel::dsl::now),
+                                        ))
+                                        .execute(&mut conn);
+
+                                    // Return the updated values for response
+                                    (price_decimal, updated_usd_value)
+                                }
+                                Err(_) => (
+                                    balance
+                                        .last_price
+                                        .clone()
+                                        .unwrap_or_else(|| BigDecimal::from(0)),
+                                    balance.usd_value.clone(),
+                                ),
+                            };
+
+                            // Use the updated values for the response
+                            balances_response.push(WalletBalanceResponse {
+                                cryptocurrency: balance.cryptocurrency.clone(),
+                                balance: balance.balance.to_string(),
+                                last_updated: balance.last_updated,
+                                usd_value: current_price.1.as_ref().map(|val| val.to_string()),
+                                last_price: Some(current_price.0.to_string()),
+                            });
+                        } else {
+                            // Use existing values for zero balances
+                            balances_response.push(WalletBalanceResponse {
+                                cryptocurrency: balance.cryptocurrency.clone(),
+                                balance: balance.balance.to_string(),
+                                last_updated: balance.last_updated,
+                                usd_value: balance.usd_value.as_ref().map(|val| val.to_string()),
+                                last_price: balance
+                                    .last_price
+                                    .as_ref()
+                                    .map(|price| price.to_string()),
+                            });
+                        }
                     } else {
                         // Create zero balance entry
                         balances_response.push(WalletBalanceResponse {
@@ -646,9 +772,10 @@ pub async fn update_balance(
                     let price_future = pricing::get_current_price(&crypto_clone);
                     let price = match tokio::runtime::Handle::current().block_on(price_future) {
                         Ok(p) => {
-                            let price_decimal = BigDecimal::from_str(&p.to_string()).unwrap_or_else(|_| BigDecimal::from_str("0").unwrap());
+                            let price_decimal = BigDecimal::from_str(&p.to_string())
+                                .unwrap_or_else(|_| BigDecimal::from_str("0").unwrap());
                             Some(price_decimal)
-                        },
+                        }
                         Err(_) => None,
                     };
 

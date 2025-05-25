@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import './AssetsOverview.css';
+import { createSynchronizedInterval, clearSynchronizedInterval } from '../utils/refreshUtils';
+import RefreshIndicator from './RefreshIndicator';
 
 function AssetsOverview() {
     const navigate = useNavigate();
@@ -10,6 +12,8 @@ function AssetsOverview() {
     const [isLoading, setIsLoading] = useState(true);
     const [apiError, setApiError] = useState('');
     const [isAdmin, setIsAdmin] = useState(false);
+    const [lastRefreshTime, setLastRefreshTime] = useState(null);
+    const [isRefreshing, setIsRefreshing] = useState(false);
     const [availableCryptocurrencies, setAvailableCryptocurrencies] = useState([]);
 
     // Enhanced function to get proper display name from user data
@@ -131,6 +135,51 @@ function AssetsOverview() {
         };
 
         fetchData();
+
+        // Create a refresh function that only updates wallet balances
+        const refreshWalletBalances = async () => {
+            const token = localStorage.getItem('auth_token');
+            if (!token) return;
+
+            try {
+                setIsRefreshing(true);
+                const walletsResponse = await fetch('http://localhost:8080/wallet/list', {
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'Content-Type': 'application/json',
+                    },
+                });
+
+                if (walletsResponse.ok) {
+                    const data = await walletsResponse.json();
+                    if (data.wallets && Array.isArray(data.wallets)) {
+                        setWallets(data.wallets);
+
+                        // Recalculate total balance with updated prices
+                        let totalUsd = 0;
+                        data.wallets.forEach(wallet => {
+                            wallet.balances.forEach(balance => {
+                                if (balance.usd_value) {
+                                    totalUsd += parseFloat(balance.usd_value);
+                                }
+                            });
+                        });
+                        setTotalBalance(totalUsd);
+                    }
+                }
+                setLastRefreshTime(new Date());
+            } catch (error) {
+                console.error('Error refreshing wallets:', error);
+            } finally {
+                setIsRefreshing(false);
+            }
+        };
+
+        // Use synchronized interval for consistent timing across components
+        const syncedInterval = createSynchronizedInterval(refreshWalletBalances);
+
+        // Clean up interval on component unmount
+        return () => clearSynchronizedInterval(syncedInterval);
     }, [navigate]);
 
     // Navigate to wallet details when a wallet is clicked
@@ -161,10 +210,10 @@ function AssetsOverview() {
             wallet.balances.forEach(balance => {
                 if (balance.usd_value) {
                     // Ensure we're handling string values correctly
-                    const balanceValue = typeof balance.usd_value === 'string' 
-                        ? parseFloat(balance.usd_value) 
+                    const balanceValue = typeof balance.usd_value === 'string'
+                        ? parseFloat(balance.usd_value)
                         : balance.usd_value;
-                    
+
                     if (!isNaN(balanceValue)) {
                         totalValue += balanceValue;
                     }
@@ -177,9 +226,9 @@ function AssetsOverview() {
     // Format USD values with appropriate precision based on value magnitude
     const formatUsdValue = (value) => {
         if (!value || isNaN(parseFloat(value))) return "$0.00";
-        
+
         const numValue = parseFloat(value);
-        
+
         // For extremely small values (less than $0.000000001), scientific notation
         if (numValue < 0.000000001 && numValue > 0) {
             return `$${numValue.toExponential(6)}`;
@@ -187,7 +236,7 @@ function AssetsOverview() {
         // For very small values (less than $0.000001), use 9 decimal places
         else if (numValue < 0.000001 && numValue > 0) {
             return `$${numValue.toFixed(9)}`;
-        } 
+        }
         // For small values (less than $0.01), use 6 decimal places
         else if (numValue < 0.01 && numValue > 0) {
             return `$${numValue.toFixed(6)}`;
@@ -195,7 +244,7 @@ function AssetsOverview() {
         // For medium values (less than $1000), use 2 decimal places
         else if (numValue < 1000) {
             return `$${numValue.toFixed(2)}`;
-        } 
+        }
         // For large values, use commas for thousands and 2 decimal places
         else {
             return `$${numValue.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -287,7 +336,13 @@ function AssetsOverview() {
                 <main className="main-content">
                     <div className="assets-overview-container">
                         <div className="assets-overview-header">
-                            <h2>Assets Overview</h2>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', width: '100%', alignItems: 'center' }}>
+                                <h2>Assets Overview</h2>
+                                <RefreshIndicator
+                                    lastRefreshTime={lastRefreshTime}
+                                    isRefreshing={isRefreshing}
+                                />
+                            </div>
                             <div className="total-assets">
                                 <div className="total-amount" title={`${totalBalance} USD`}>
                                     {formatUsdValue(totalBalance)} USD

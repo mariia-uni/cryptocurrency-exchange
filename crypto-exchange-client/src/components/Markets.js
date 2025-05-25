@@ -2,6 +2,8 @@ import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { useNavigate, Link } from 'react-router-dom';
 import './Markets.css';
+import { createSynchronizedInterval, clearSynchronizedInterval } from '../utils/refreshUtils';
+import RefreshIndicator from './RefreshIndicator';
 
 const Markets = () => {
     const navigate = useNavigate();
@@ -10,6 +12,8 @@ const Markets = () => {
     const [error, setError] = useState(null);
     const [activeTab, setActiveTab] = useState('all');
     const [userData, setUserData] = useState(null);
+    const [lastRefreshTime, setLastRefreshTime] = useState(null);
+    const [isRefreshing, setIsRefreshing] = useState(false);
     const [marketStats, setMarketStats] = useState({
         totalCoins: 0,
         totalMarketCap: 0,
@@ -124,7 +128,7 @@ const Markets = () => {
         // Fetch market data
         const fetchMarkets = async () => {
             try {
-                setLoading(true);
+                setIsRefreshing(true);
                 const response = await axios.get(`${API_BASE_URL}/api/markets`);
                 const cryptocurrencies = response.data.cryptocurrencies;
                 setMarkets(cryptocurrencies);
@@ -144,17 +148,20 @@ const Markets = () => {
                 }
 
                 setError(null);
+                // Update last refresh time
+                setLastRefreshTime(new Date());
             } catch (err) {
                 setError('Failed to fetch market data. Please try again later.');
                 console.error('Error fetching markets:', err);
             } finally {
                 setLoading(false);
+                setIsRefreshing(false);
             }
         };
 
-        fetchMarkets();
-        const intervalId = setInterval(fetchMarkets, 60000);
-        return () => clearInterval(intervalId);
+        // Use synchronized interval for consistent timing across components
+        const syncedInterval = createSynchronizedInterval(fetchMarkets);
+        return () => clearSynchronizedInterval(syncedInterval);
     }, [API_BASE_URL, navigate]);
 
     // Filter cryptocurrencies based on active tab
@@ -278,8 +285,16 @@ const Markets = () => {
 
                 <main className="main-content">
                     <div className="welcome-section">
-                        <h2>Cryptocurrency Markets</h2>
-                        <p>Live prices and market data for top cryptocurrencies</p>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                            <div>
+                                <h2>Cryptocurrency Markets</h2>
+                                <p>Live prices and market data for top cryptocurrencies</p>
+                            </div>
+                            <RefreshIndicator
+                                lastRefreshTime={lastRefreshTime}
+                                isRefreshing={isRefreshing}
+                            />
+                        </div>
                     </div>
 
                     {/* Market Statistics Cards - Updated class for styling */}

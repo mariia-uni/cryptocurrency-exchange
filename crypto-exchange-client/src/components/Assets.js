@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import './Assets.css';
+import { createSynchronizedInterval, clearSynchronizedInterval } from '../utils/refreshUtils';
+import RefreshIndicator from './RefreshIndicator';
 
 function Assets() {
     const navigate = useNavigate();
@@ -8,6 +10,8 @@ function Assets() {
     const [isLoading, setIsLoading] = useState(true);
     const [apiError, setApiError] = useState('');
     const [isAdmin, setIsAdmin] = useState(false);
+    const [lastRefreshTime, setLastRefreshTime] = useState(null);
+    const [isRefreshing, setIsRefreshing] = useState(false);
 
     // Wallet creation state
     const [showWalletCreation, setShowWalletCreation] = useState(false);
@@ -292,13 +296,13 @@ function Assets() {
     // Format USD values with appropriate precision based on value magnitude
     const formatUsdValue = (value) => {
         if (!value || isNaN(parseFloat(value))) return "$0.00";
-        
+
         const numValue = parseFloat(value);
-        
+
         // For very small values (less than $0.000001), use 9 decimal places
         if (numValue < 0.000001 && numValue > 0) {
             return `$${numValue.toFixed(9)}`;
-        } 
+        }
         // For small values (less than $0.01), use 6 decimal places
         else if (numValue < 0.01 && numValue > 0) {
             return `$${numValue.toFixed(6)}`;
@@ -306,7 +310,7 @@ function Assets() {
         // For medium values (less than $1000), use 2 decimal places
         else if (numValue < 1000) {
             return `$${numValue.toFixed(2)}`;
-        } 
+        }
         // For large values, use commas for thousands and 2 decimal places
         else {
             return `$${numValue.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -318,9 +322,9 @@ function Assets() {
     // Format cryptocurrency values with appropriate precision based on magnitude
     const formatCryptoValue = (value, symbol) => {
         if (!value || isNaN(parseFloat(value))) return "0.00000000";
-        
+
         const numValue = parseFloat(value);
-        
+
         // Different formatting based on cryptocurrency type
         if (symbol === 'BTC' || symbol === 'ETH') {
             // For BTC/ETH show 8 decimal places
@@ -414,7 +418,30 @@ function Assets() {
         };
 
         fetchUserData();
-        return () => { };
+
+        // Create a refresh function that only updates wallet balances
+        const refreshWalletBalances = async () => {
+            setIsRefreshing(true);
+            const token = localStorage.getItem('auth_token');
+            try {
+                if (token) {
+                    // Only refresh wallet data without refreshing user profile
+                    await fetchUserWallets(token);
+                    // Update last refresh time
+                    setLastRefreshTime(new Date());
+                }
+            } catch (error) {
+                console.error('Error refreshing wallet data:', error);
+            } finally {
+                setIsRefreshing(false);
+            }
+        };
+
+        // Use synchronized interval for consistent timing across components
+        const syncedInterval = createSynchronizedInterval(refreshWalletBalances);
+
+        // Clean up interval on component unmount
+        return () => clearSynchronizedInterval(syncedInterval);
     }, [navigate]);
 
     // Example of how to update Assets.js later (not part of current task)
@@ -424,7 +451,7 @@ function Assets() {
         if (selectedWalletId) {
             // Clear it to avoid issues on page refresh
             sessionStorage.removeItem('selectedWalletId');
-            
+
             // Scroll to the selected wallet after wallets are loaded
             setTimeout(() => {
                 const element = document.getElementById(`wallet-${selectedWalletId}`);
@@ -462,7 +489,7 @@ function Assets() {
                 <div className="wallets-header">
                     <div className="wallets-header-left">
                         <h3>Your Wallets</h3>
-                        <button 
+                        <button
                             className="back-to-overview-button"
                             onClick={() => navigate('/assets-overview')}
                         >
@@ -586,8 +613,8 @@ function Assets() {
                                             <td className="balance-amount">
                                                 <div>
                                                     <div className="crypto-balance-value">
-                                                        {parseFloat(balance.balance) > 0 
-                                                            ? formatCryptoValue(balance.balance, balance.cryptocurrency) 
+                                                        {parseFloat(balance.balance) > 0
+                                                            ? formatCryptoValue(balance.balance, balance.cryptocurrency)
                                                             : "0.00000000"} {balance.cryptocurrency}
                                                     </div>
                                                     <div className="usd-value">
@@ -738,6 +765,10 @@ function Assets() {
                 <div className="header-actions">
                     <div className="search-container">
                         <input type="text" placeholder="Search..." className="search-input" />
+                        <RefreshIndicator
+                            lastRefreshTime={lastRefreshTime}
+                            isRefreshing={isRefreshing}
+                        />
                     </div>
 
                     <button className="deposit-button">Deposit</button>
