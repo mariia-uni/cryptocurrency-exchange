@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { Link } from 'react-router-dom';
 import './StaticPages.css';
 
 function Support() {
@@ -36,22 +37,22 @@ function Support() {
 
                         <div className="faq-item">
                             <h3>How do I create an account?</h3>
-                            <p>To create an account, click on the "Sign Up" button at the top of the page and follow the registration process.</p>
+                            <p>To get started, click on the “Sign Up” button at the top of the page and follow the quick registration steps. No personal or financial information is required — it's all simulation-based.</p>
                         </div>
 
                         <div className="faq-item">
-                            <h3>How long does verification take?</h3>
+                            <h3>Do I need to verify my identity?</h3>
                             <p>Basic verification is instant. ID verification typically takes 1-3 business days to complete.</p>
                         </div>
 
                         <div className="faq-item">
                             <h3>How do I deposit funds?</h3>
-                            <p>After logging in, click on the "Deposit" button in the header and follow the instructions for your preferred payment method.</p>
+                            <p>This platform uses virtual funds for educational purposes. After logging in, click on the “Deposit” button to receive simulated credits you can use to practice trading.</p>
                         </div>
 
                         <div className="faq-item">
-                            <h3>What are the trading fees?</h3>
-                            <p>Our trading fees start at 0.1% and vary based on trading volume and account tier. See our fee schedule for details.</p>
+                            <h3>Are there trading fees?</h3>
+                            <p>Our trading simulator mimics real-world fee structures. Simulated fees start at 0.1%, helping users understand how costs can affect trading outcomes — all without spending actual money.</p>
                         </div>
                     </div>
 
@@ -133,6 +134,12 @@ function Support() {
                             <p className="support-hours">Available Mon-Fri, 9AM-5PM EST</p>
                         </div>
                     </div>
+                </div>
+                <div className="static-page-footer">
+                    <Link to="/dashboard">Home</Link>
+                    <Link to="/about">About Us</Link>
+                    <Link to="/terms">Terms of Service</Link>
+                    <Link to="/privacy">Privacy Policy</Link>
                 </div>
             </div>
         </div>

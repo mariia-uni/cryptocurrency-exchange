@@ -249,7 +249,12 @@ function Dashboard() {
                 <div className="logo">CryptoX</div>
                 <div className="header-actions">
                     <SearchBox />
-                    <button className="deposit-button">Deposit</button>
+                    <button
+                        className="deposit-button"
+                        onClick={() => navigate('/deposit')}
+                    >
+                        Deposit
+                    </button>
 
                     {/* Admin button - only visible for admin users */}
                     {isAdmin && (
@@ -352,7 +357,7 @@ function Dashboard() {
                             </div>
 
                             <div className="profile-detail-item">
-                                <div className="detail-label">Full Name</div>
+                                <div className="detail-label">Username</div>
                                 <div className="detail-value">
                                     {userData?.username}
                                 </div>

@@ -1,4 +1,5 @@
 import React from 'react';
+import { Link } from 'react-router-dom';
 import './StaticPages.css';
 
 function Privacy() {
@@ -6,36 +7,36 @@ function Privacy() {
         <div className="static-page-container">
             <div className="static-page-content">
                 <h1>Privacy Policy</h1>
-                <p>Last updated: May 13, 2025</p>
+                <p className="last-updated">Last updated: May 13, 2025</p>
 
                 <section>
                     <h2>1. Introduction</h2>
-                    <p>Your privacy is important to us. This Privacy Policy explains how CryptoX collects, uses, and protects your personal information.</p>
+                    <p>Your privacy is important to us. This Privacy Policy explains how CryptoX Simulator collects, uses, and protects your information while you interact with our educational cryptocurrency-exchange simulator. Please note: our platform does not involve real money, real cryptocurrency transactions, or real blockchain technology.</p>
                 </section>
 
                 <section>
                     <h2>2. Information We Collect</h2>
-                    <p>We collect personal information including but not limited to: name, email address, phone number, address, date of birth, and identification documents.</p>
+                    <p>We may collect basic personal information such as your name, email address, and username to create and manage your simulator account. No financial data or official identification documents are required, as this is a training environment.</p>
                 </section>
 
                 <section>
                     <h2>3. How We Use Your Information</h2>
-                    <p>We use your information to provide our services, verify your identity, comply with legal requirements, improve our platform, and communicate with you.</p>
+                    <p>We use your information to provide access to the simulator features, track your progress and performance within the simulated environment, improve our platform’s usability and educational value, improve our platform, and communicate with you about updates and support.</p>
                 </section>
 
                 <section>
                     <h2>4. Data Security</h2>
-                    <p>We implement appropriate security measures to protect your data from unauthorized access and disclosure.</p>
+                    <p>We implement appropriate technical and organizational measures to protect your data against unauthorized access, loss, or misuse.</p>
                 </section>
 
                 <section>
                     <h2>5. Cookies and Analytics</h2>
-                    <p>We use cookies and similar technologies to enhance your experience on our platform and analyze usage patterns.</p>
+                    <p>We use cookies and similar technologies to understand how users interact with our platform and to enhance your experience. This may include usage data to help us improve simulator features and user flow.</p>
                 </section>
 
                 <section>
                     <h2>6. Third-Party Sharing</h2>
-                    <p>We may share your information with third parties for identity verification, payment processing, and regulatory compliance.</p>
+                    <p>We do not share your personal information with any third parties for financial, regulatory, or identity verification purposes, as no real transactions are conducted. Limited data may be shared with analytics providers to enhance the simulator experience.</p>
                 </section>
 
                 <section>
@@ -52,6 +53,13 @@ function Privacy() {
                     <h2>9. Contact Us</h2>
                     <p>If you have questions about this Privacy Policy, please contact us at privacy@cryptox.com</p>
                 </section>
+
+                <div className="static-page-footer">
+                    <Link to="/dashboard">Home</Link>
+                    <Link to="/about">About Us</Link>
+                    <Link to="/terms">Terms of Service</Link>
+                    <Link to="/support">Contact Support</Link>
+                </div>
             </div>
         </div>
     );
