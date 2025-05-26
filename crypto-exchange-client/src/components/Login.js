@@ -123,10 +123,6 @@ function Login() {
                         {errors.password && <span className="error-text">{errors.password}</span>}
                     </div>
 
-                    <div className="forgot-password">
-                        <a href="/forgot-password">Forgot your password?</a>
-                    </div>
-
                     <button type="submit" className="login-button" disabled={isSubmitting}>
                         {isSubmitting ? 'Logging in...' : 'Log In'}
                     </button>

@@ -2,35 +2,41 @@
     display: flex;
     flex-direction: column;
     min-height: 100vh;
-    background-color: #f8fafc;
+    background-color: #0e1217;
+    color: #f5f5f5;
+    font-family: 'Inter', sans-serif;
 }
 
 .admin-header {
-    background-color: #1e293b;
-    color: white;
+    background-color: #1a1f2a;
+    color: #f5f5f5;
     padding: 20px;
     display: flex;
     justify-content: space-between;
     align-items: center;
+    border-bottom: 1px solid #2e3444;
 }
 
 .admin-header h1 {
     margin: 0;
     font-size: 24px;
+    color: #ffffff;
 }
 
 .back-button {
     background-color: transparent;
-    border: 1px solid white;
-    color: white;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    color: #f5f5f5;
     border-radius: 6px;
     padding: 8px 16px;
     cursor: pointer;
     transition: background-color 0.2s;
+    font-weight: 500;
 }
 
 .back-button:hover {
     background-color: rgba(255, 255, 255, 0.1);
+    border-color: #f0b90b;
 }
 
 .admin-content {
@@ -41,38 +47,40 @@
 }
 
 .admin-card {
-    background-color: white;
+    background-color: #1a1f2a;
     border-radius: 8px;
     padding: 24px;
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+    border: 1px solid #2e3444;
     position: relative;
 }
 
 .admin-card h2 {
     margin-top: 0;
     font-size: 18px;
-    color: #334155;
+    color: #ffffff;
     margin-bottom: 12px;
 }
 
 .admin-card p {
-    color: #64748b;
+    color: #b0b0b0;
     margin-bottom: 20px;
 }
 
 .admin-action-button {
-    background-color: #3b82f6;
-    color: white;
+    background-color: #f0b90b;
+    color: #000000;
     border: none;
     border-radius: 6px;
     padding: 10px 16px;
     font-size: 14px;
+    font-weight: 500;
     cursor: pointer;
     transition: background-color 0.2s;
 }
 
 .admin-action-button:hover {
-    background-color: #2563eb;
+    background-color: #f8d12f;
 }
 
 .admin-loading,
@@ -83,15 +91,18 @@
     align-items: center;
     min-height: 100vh;
     font-size: 18px;
-    color: #64748b;
+}
+
+.admin-loading {
+    color: #b0b0b0;
 }
 
 .admin-error {
-    color: #ef4444;
+    color: #ff5757;
 }
 
 .admin-unauthorized {
-    color: #f59e0b;
+    color: #f0b90b;
 }
 
 .verification-card {
@@ -102,7 +113,7 @@
     position: absolute;
     top: 10px;
     right: 10px;
-    background-color: #ef4444;
+    background-color: #ff5757;
     color: white;
     width: 24px;
     height: 24px;
@@ -118,8 +129,8 @@
     position: absolute;
     top: 10px;
     right: 10px;
-    background-color: #3b82f6;
-    color: white;
+    background-color: #f0b90b;
+    color: #000000;
     width: 24px;
     height: 24px;
     border-radius: 50%;

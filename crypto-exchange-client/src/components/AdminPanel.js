@@ -9,7 +9,7 @@ function AdminPanel() {
     const [isLoading, setIsLoading] = useState(true);
     const [apiError, setApiError] = useState('');
     const [verificationCount, setVerificationCount] = useState(0);
-    const [userCount, setUserCount] = useState(0); // Add state for user count
+    const [userCount, setUserCount] = useState(0);
 
     useEffect(() => {
         const checkAdminAccess = async () => {
@@ -131,12 +131,6 @@ function AdminPanel() {
                     >
                         View Queue
                     </button>
-                </div>
-
-                <div className="admin-card">
-                    <h2>System Settings</h2>
-                    <p>Configure platform settings and parameters</p>
-                    <button className="admin-action-button">Settings</button>
                 </div>
             </div>
         </div>

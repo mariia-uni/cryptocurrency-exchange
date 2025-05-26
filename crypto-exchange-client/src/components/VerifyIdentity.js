@@ -445,7 +445,9 @@ function VerifyIdentity() {
 
                         <div className="next-steps-card">
                             <h3>Next Step: Document Verification</h3>
-                            <p>To complete your identity verification, please upload a government-issued ID document.</p>
+                            <p className="verification-instruction">
+                                To complete your identity verification, please upload a government-issued ID document.
+                            </p>
                             <button
                                 className="document-upload-button"
                                 onClick={() => navigate('/document-upload')}
