@@ -258,7 +258,7 @@ pub struct WalletBalance {
     pub cryptocurrency: String,
     pub balance: BigDecimal,
     pub last_updated: chrono::NaiveDateTime,
-    pub usd_value: Option<BigDecimal>, // New field
+    pub usd_value: Option<BigDecimal>,  // New field
     pub last_price: Option<BigDecimal>, // New field
 }
 
@@ -268,7 +268,7 @@ pub struct NewWalletBalance {
     pub wallet_id: i64,
     pub cryptocurrency: String,
     pub balance: BigDecimal,
-    pub usd_value: Option<BigDecimal>, // New field
+    pub usd_value: Option<BigDecimal>,  // New field
     pub last_price: Option<BigDecimal>, // New field
 }
 
@@ -297,7 +297,7 @@ pub struct WalletBalanceResponse {
     pub cryptocurrency: String,
     pub balance: String,
     pub last_updated: chrono::NaiveDateTime,
-    pub usd_value: Option<String>, // New field
+    pub usd_value: Option<String>,  // New field
     pub last_price: Option<String>, // New field
 }
 
@@ -412,4 +412,74 @@ impl From<Transaction> for TransactionResponse {
             created_at: tx.created_at,
         }
     }
+}
+
+// Models for withdrawals
+#[derive(Queryable, Serialize, Debug)]
+pub struct Withdrawal {
+    pub id: i32,
+    pub user_id: i32,
+    pub wallet_id: i64,
+    pub transaction_id: String,
+    pub cryptocurrency: String,
+    pub amount: BigDecimal,
+    pub fee: BigDecimal,
+    pub address: String,
+    pub blockchain: String,
+    pub withdrawal_type: String,
+    pub status: String,
+    pub created_at: chrono::NaiveDateTime,
+    pub updated_at: chrono::NaiveDateTime,
+    pub completed_at: Option<chrono::NaiveDateTime>,
+}
+
+#[derive(Insertable, Debug)]
+#[diesel(table_name = crate::schema::withdrawals)]
+pub struct NewWithdrawal {
+    pub user_id: i32,
+    pub wallet_id: i64,
+    pub transaction_id: String,
+    pub cryptocurrency: String,
+    pub amount: BigDecimal,
+    pub fee: BigDecimal,
+    pub address: String,
+    pub blockchain: String,
+    pub withdrawal_type: String,
+    pub status: String,
+}
+
+// Request DTO for withdrawal
+#[derive(Deserialize)]
+pub struct WithdrawalRequest {
+    pub wallet_id: i64,
+    pub cryptocurrency: String,
+    pub amount: String,
+    pub address: String,
+    pub blockchain: String,
+    pub withdrawal_type: String,
+}
+
+// Response DTO for withdrawal
+#[derive(Serialize)]
+pub struct WithdrawalResponse {
+    pub success: bool,
+    pub transaction_id: String,
+    pub status: String,
+    pub message: String,
+}
+
+// Response DTO for withdrawal history
+#[derive(Serialize)]
+pub struct WithdrawalHistoryItem {
+    pub id: i32,
+    pub transaction_id: String,
+    pub cryptocurrency: String,
+    pub amount: String,
+    pub fee: String,
+    pub address: String,
+    pub blockchain: String,
+    pub status: String,
+    pub created_at: chrono::NaiveDateTime,
+    pub updated_at: chrono::NaiveDateTime,
+    pub completed_at: Option<chrono::NaiveDateTime>,
 }

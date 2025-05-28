@@ -4,9 +4,10 @@ use crate::schema::cryptocurrencies;
 use actix_web::{HttpResponse, Responder, get, web};
 use diesel::prelude::*;
 use diesel::upsert::excluded;
-// Add this import for ExpressionMethods
 use log::{error, info};
 use serde::{Deserialize, Serialize};
+use serde_json::json; // Add this import for the json! macro
+use std::collections::HashMap;
 use std::env;
 
 /// Structure to represent CoinMarketCap API response
@@ -355,4 +356,164 @@ pub async fn fetch_coinmarketcap_data() -> Result<CoinMarketCapResponse, Box<dyn
     );
 
     Ok(cmc_data)
+}
+
+/// Structure for withdrawal-specific cryptocurrency info
+#[derive(Serialize, Debug)]
+pub struct WithdrawableCryptocurrency {
+    pub symbol: String,
+    pub name: String,
+    pub icon_url: Option<String>,
+    pub is_active: bool,
+    pub min_withdrawal: String,
+    pub withdrawal_fee: String,
+    pub blockchain_networks: Vec<String>,
+    pub is_withdrawable: bool,
+}
+
+/// Endpoint to retrieve cryptocurrencies with withdrawal information
+#[get("/api/withdrawal/cryptocurrencies")]
+pub async fn get_withdrawable_cryptocurrencies(pool: web::Data<DbPool>) -> impl Responder {
+    // Get the API key from environment
+    let api_key = match env::var("COINMARKETCAP_API_KEY") {
+        Ok(key) => key,
+        Err(_) => {
+            error!("COINMARKETCAP_API_KEY not found in environment variables");
+            return HttpResponse::InternalServerError().json(serde_json::json!({
+                "error": "API configuration error"
+            }));
+        }
+    };
+
+    // First get cryptocurrencies from our database
+    let mut conn = match pool.get() {
+        Ok(conn) => conn,
+        Err(e) => {
+            error!("Failed to get database connection: {}", e);
+            return HttpResponse::InternalServerError().json(serde_json::json!({
+                "error": "Database connection error"
+            }));
+        }
+    };
+
+    // Query all active cryptocurrencies
+    let db_cryptos = match web::block(move || {
+        use crate::schema::cryptocurrencies::dsl::*;
+        cryptocurrencies
+            .filter(is_active.eq(true))
+            .order_by(symbol.asc())
+            .load::<Cryptocurrency>(&mut conn)
+    })
+    .await
+    {
+        Ok(Ok(result)) => result,
+        _ => {
+            return HttpResponse::InternalServerError().json(serde_json::json!({
+                "error": "Failed to fetch cryptocurrencies"
+            }));
+        }
+    };
+
+    // Create a client for API requests
+    let client = reqwest::Client::new();
+
+    // Get withdrawal-specific information from CoinMarketCap
+    // In a real implementation, you'd likely combine this with your own fee structure
+    let withdrawable_cryptos: Vec<WithdrawableCryptocurrency> = db_cryptos
+        .into_iter()
+        .map(|crypto| {
+            // Define blockchain networks based on cryptocurrency
+            let networks = match crypto.symbol.as_str() {
+                "BTC" => vec!["Bitcoin Mainnet".to_string()],
+                "ETH" => vec!["ERC20".to_string()],
+                "USDT" => vec![
+                    "ERC20".to_string(),
+                    "TRC20".to_string(),
+                    "BEP20".to_string(),
+                ],
+                "BNB" => vec!["BEP2".to_string(), "BEP20".to_string()],
+                _ => vec!["Mainnet".to_string()],
+            };
+
+            // Define minimum withdrawal amounts
+            let min_withdrawal = match crypto.symbol.as_str() {
+                "BTC" => "0.00027",
+                "ETH" => "0.01",
+                "USDT" => "20",
+                _ => "0.01",
+            };
+
+            // Define withdrawal fees
+            let withdrawal_fee = match crypto.symbol.as_str() {
+                "BTC" => "0.000113",
+                "ETH" => "0.003",
+                "USDT" => "2.0",
+                _ => "0.001",
+            };
+
+            WithdrawableCryptocurrency {
+                symbol: crypto.symbol,
+                name: crypto.name,
+                icon_url: crypto.icon_url,
+                is_active: crypto.is_active,
+                min_withdrawal: min_withdrawal.to_string(),
+                withdrawal_fee: withdrawal_fee.to_string(),
+                blockchain_networks: networks,
+                is_withdrawable: true, // You might want to have specific criteria for this
+            }
+        })
+        .collect();
+
+    HttpResponse::Ok().json(serde_json::json!({
+        "withdrawable_cryptocurrencies": withdrawable_cryptos,
+        "count": withdrawable_cryptos.len()
+    }))
+}
+
+// Function to retrieve available networks for a specific cryptocurrency
+#[get("/api/withdrawal/networks/{symbol}")]
+pub async fn get_withdrawal_networks(path: web::Path<String>) -> impl Responder {
+    let symbol = path.into_inner();
+
+    // Define blockchain networks based on cryptocurrency
+    let networks = match symbol.to_uppercase().as_str() {
+        "BTC" => vec![json!({
+            "network": "Bitcoin Mainnet",
+            "fee": "0.000113",
+            "min_withdrawal": "0.00027",
+            "is_active": true
+        })],
+        "ETH" => vec![json!({
+            "network": "ERC20",
+            "fee": "0.003",
+            "min_withdrawal": "0.01",
+            "is_active": true
+        })],
+        "USDT" => vec![
+            json!({
+                "network": "ERC20",
+                "fee": "2.0",
+                "min_withdrawal": "20",
+                "is_active": true
+            }),
+            json!({
+                "network": "TRC20",
+                "fee": "1.0",
+                "min_withdrawal": "10",
+                "is_active": true
+            }),
+            json!({
+                "network": "BEP20",
+                "fee": "0.5",
+                "min_withdrawal": "10",
+                "is_active": true
+            }),
+        ],
+        _ => Vec::new(),
+    };
+
+    HttpResponse::Ok().json(serde_json::json!({
+        "symbol": symbol.to_uppercase(),
+        "networks": networks
+    }))
 }

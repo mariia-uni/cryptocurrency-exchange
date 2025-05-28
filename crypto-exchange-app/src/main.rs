@@ -22,14 +22,17 @@ use uuid::Uuid;
 
 pub mod auth;
 pub mod db;
-pub mod deposits; // Add this new module
+pub mod deposits;
 pub mod email;
 pub mod markets;
 pub mod models;
-pub mod schema; // Add the markets module
-pub mod wallets; // Add this line
-pub mod transactions; // Add this to your imports
-pub mod pricing; // Add this to your module declarations
+pub mod pricing;
+pub mod schema;
+pub mod transactions;
+mod transfers;
+mod users;
+pub mod wallets;
+pub mod withdrawals; // Add the new withdrawals module
 
 use argon2::{
     Argon2,
@@ -1404,18 +1407,16 @@ async fn main() -> std::io::Result<()> {
 
         // Create the wallet scope inside the closure instead
         let wallet_scope = web::scope("/wallet")
-            // Make sure list_wallets is registered BEFORE any parameter-based routes
-            .service(wallets::list_wallets) // This should come first!
+            .service(wallets::list_wallets)
             .service(wallets::create_wallet)
             .service(wallets::generate_address)
-            .service(wallets::get_wallet) // This likely has a param that's catching "list"
+            .service(wallets::get_wallet)
             .service(wallets::update_balance);
 
         App::new()
             .app_data(web::Data::new(pool.clone()))
             .wrap(actix_web::middleware::Logger::default())
             .wrap(cors)
-            // Add this line to serve static files
             .service(Files::new("/uploads", "uploads").show_files_listing())
             .service(health_check)
             .service(users_route)
@@ -1429,9 +1430,7 @@ async fn main() -> std::io::Result<()> {
                     .service(verification_status)
                     .service(upload_id_document),
             )
-            .service(
-                web::scope("/user").service(user_profile), // Add this line
-            )
+            .service(web::scope("/user").service(user_profile))
             .service(
                 web::scope("/admin")
                     .service(check_admin_access)
@@ -1440,13 +1439,18 @@ async fn main() -> std::io::Result<()> {
                     .service(serve_document)
                     .service(admin_get_users)
                     .service(admin_create_user)
-                    .service(admin_update_user), // Remove the password reset endpoint from here
+                    .service(admin_update_user),
             )
-            .service(markets::get_markets) // Add the markets endpoint
-            .service(markets::get_cryptocurrencies) // New endpoint
-            .configure(transactions::configure_routes) // Add transaction routes
-            .service(wallet_scope) // Keep only this wallet registration
-            .configure(deposits::configure_routes) // Add the deposit routes
+            .service(markets::get_markets)
+            .service(markets::get_cryptocurrencies)
+            .service(markets::get_withdrawable_cryptocurrencies) // Add new endpoint
+            .service(markets::get_withdrawal_networks) // Add new endpoint
+            .configure(transactions::configure_routes)
+            .configure(transfers::configure_routes)
+            .configure(users::configure_routes)
+            .service(wallet_scope)
+            .configure(deposits::configure_routes)
+            .configure(withdrawals::configure_routes)
     })
     .bind(format!("{}:{}", host, port))?
     .run()

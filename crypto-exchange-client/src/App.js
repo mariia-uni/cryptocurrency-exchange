@@ -18,6 +18,7 @@ import Markets from './components/Markets';
 import Assets from './components/Assets';
 import AssetsOverview from './components/AssetsOverview';
 import Deposit from './components/Deposit';
+import Withdrawal from './components/Withdrawal';
 import './App.css';
 
 const ProtectedRoute = ({ children }) => {
@@ -63,6 +64,7 @@ function App() {
         <Route path="/settings" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
         <Route path="/reset-password" element={<ResetPassword />} />
         <Route path="/deposit" element={<Deposit />} />
+        <Route path="/withdrawal" element={<Withdrawal />} />
 
         {/* Admin routes */}
         <Route path="/admin" element={<AdminRoute><AdminPanel /></AdminRoute>} />

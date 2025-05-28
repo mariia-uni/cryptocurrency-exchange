@@ -315,6 +315,10 @@ function Dashboard() {
                             <span className="nav-icon">💰</span>
                             <span className="nav-text">Deposit</span>
                         </li>
+                        <li className="nav-item" onClick={() => navigate('/withdrawal')}>
+                            <span className="nav-icon">💸</span>
+                            <span className="nav-text">Withdrawal</span>
+                        </li>
                         <li className="nav-item" onClick={() => navigate('/settings')}>
                             <span className="nav-icon">👤</span>
                             <span className="nav-text">Account Settings</span>

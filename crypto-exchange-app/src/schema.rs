@@ -140,6 +140,25 @@ diesel::table! {
     }
 }
 
+diesel::table! {
+    withdrawals (id) {
+        id -> Int4,
+        user_id -> Int4,
+        wallet_id -> Int8,
+        transaction_id -> Text,
+        cryptocurrency -> Text,
+        amount -> Numeric,
+        fee -> Numeric,
+        address -> Text,
+        blockchain -> Text,
+        withdrawal_type -> Text,
+        status -> Text,
+        created_at -> Timestamp,
+        updated_at -> Timestamp,
+        completed_at -> Nullable<Timestamp>,
+    }
+}
+
 diesel::joinable!(password_reset_tokens -> users (user_id));
 diesel::joinable!(transactions -> users (user_id));
 diesel::joinable!(transactions -> wallets (wallet_id));
@@ -147,6 +166,8 @@ diesel::joinable!(user_verifications -> users (user_id));
 diesel::joinable!(wallet_addresses -> wallets (wallet_id));
 diesel::joinable!(wallet_balances -> wallets (wallet_id));
 diesel::joinable!(wallets -> users (user_id));
+diesel::joinable!(withdrawals -> users (user_id));
+diesel::joinable!(withdrawals -> wallets (wallet_id));
 
 diesel::allow_tables_to_appear_in_same_query!(
     cryptocurrencies,
@@ -157,4 +178,5 @@ diesel::allow_tables_to_appear_in_same_query!(
     wallet_addresses,
     wallet_balances,
     wallets,
+    withdrawals,
 );
