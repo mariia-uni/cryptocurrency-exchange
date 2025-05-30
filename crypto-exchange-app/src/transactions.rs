@@ -1,4 +1,4 @@
-use actix_web::{web, HttpRequest, HttpResponse};
+use actix_web::{HttpRequest, HttpResponse, web};
 use bigdecimal::BigDecimal;
 use diesel::prelude::*;
 use log::{error, info};
@@ -128,7 +128,7 @@ pub async fn get_user_transactions(
     match transactions_result {
         Ok(txs) => {
             // Convert to response DTOs
-            let transaction_responses: Vec<TransactionResponse> = 
+            let transaction_responses: Vec<TransactionResponse> =
                 txs.into_iter().map(TransactionResponse::from).collect();
 
             Ok(HttpResponse::Ok().json(serde_json::json!({
@@ -157,10 +157,94 @@ pub async fn transaction_history(
     get_user_transactions(req, pool, filters).await
 }
 
+// Add new struct for the response
+#[derive(Serialize)]
+pub struct TransactionHistoryItem {
+    pub id: i32,
+    pub transaction_id: String,
+    pub cryptocurrency: String,
+    pub amount: String,
+    pub fee: String,
+    pub address: String,
+    pub blockchain: Option<String>,
+    pub transaction_type: String,
+    pub is_internal: bool,
+    pub status: String,
+    pub created_at: chrono::NaiveDateTime,
+}
+
+// API endpoint to get complete transaction history
+#[actix_web::get("/history/all")]
+pub async fn complete_transaction_history(
+    req: HttpRequest,
+    pool: web::Data<DbPool>,
+) -> Result<HttpResponse, actix_web::Error> {
+    // Extract user_id from JWT token
+    let user_id = auth::extract_user_id(&req)?;
+
+    let mut conn = pool
+        .get()
+        .map_err(|_| actix_web::error::ErrorInternalServerError("Database connection error"))?;
+
+    // Get all transactions for this user
+    let transactions_result = web::block(move || {
+        transactions::table
+            .filter(transactions::user_id.eq(user_id))
+            .order_by(transactions::created_at.desc())
+            .load::<Transaction>(&mut conn)
+    })
+    .await
+    .map_err(|e| {
+        error!("Database error: {:?}", e);
+        actix_web::error::ErrorInternalServerError("Failed to fetch transaction history")
+    })?;
+
+    match transactions_result {
+        Ok(txs) => {
+            // Convert to response DTOs with direction and type information
+            let history_items: Vec<TransactionHistoryItem> = txs
+                .into_iter()
+                .map(|tx| {
+                    // Determine if internal transfer by checking transaction type and blockchain presence
+                    let is_internal = tx.transaction_type == "transfer" && tx.blockchain.is_none();
+
+                    TransactionHistoryItem {
+                        id: tx.id,
+                        transaction_id: tx.transaction_hash.clone(),
+                        cryptocurrency: tx.cryptocurrency,
+                        amount: tx.amount.to_string(),
+                        fee: tx
+                            .fee
+                            .map(|f| f.to_string())
+                            .unwrap_or_else(|| "0".to_string()),
+                        address: tx.address.unwrap_or_else(|| "".to_string()),
+                        blockchain: tx.blockchain,
+                        transaction_type: tx.transaction_type,
+                        is_internal,
+                        status: tx.status,
+                        created_at: tx.created_at,
+                    }
+                })
+                .collect();
+
+            Ok(HttpResponse::Ok().json(serde_json::json!({
+                "transactions": history_items
+            })))
+        }
+        Err(e) => {
+            error!("Database query error: {:?}", e);
+            Ok(HttpResponse::InternalServerError().json(serde_json::json!({
+                "error": "Failed to retrieve transaction history"
+            })))
+        }
+    }
+}
+
 // Configure transaction routes
 pub fn configure_routes(cfg: &mut web::ServiceConfig) {
     cfg.service(
         web::scope("/transactions")
             .service(transaction_history)
+            .service(complete_transaction_history),
     );
 }

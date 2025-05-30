@@ -152,10 +152,19 @@ pub async fn submit_withdrawal(
         }
     };
 
-    // Check if amount is positive
-    if amount <= BigDecimal::from(0) {
+    // Get minimum withdrawal amount for this cryptocurrency
+    let min_withdrawal = match withdrawal_req.cryptocurrency.as_str() {
+        "BTC" => BigDecimal::from_str("0.00027").unwrap(),
+        "ETH" => BigDecimal::from_str("0.01").unwrap(),
+        "USDT" => BigDecimal::from_str("20").unwrap(),
+        _ => BigDecimal::from_str("0.01").unwrap(),
+    };
+
+    // Check if amount meets minimum threshold
+    if amount < min_withdrawal {
         return Ok(HttpResponse::BadRequest().json(serde_json::json!({
-            "error": "Withdrawal amount must be greater than zero"
+            "error": format!("Withdrawal amount must be at least {} {}",
+                              min_withdrawal, withdrawal_req.cryptocurrency)
         })));
     }
 

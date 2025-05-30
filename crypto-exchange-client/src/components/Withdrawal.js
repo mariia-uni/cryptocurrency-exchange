@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import './Withdrawal.css';
 import SearchBox from './SearchBox/SearchBox';
@@ -15,7 +15,6 @@ function Withdrawal() {
     const [address, setAddress] = useState('');
     const [chain, setChain] = useState('BTC');
     const [withdrawalType, setWithdrawalType] = useState('on-chain');
-    const [withdrawalHistory, setWithdrawalHistory] = useState([]);
     const [isConfirmationVisible, setIsConfirmationVisible] = useState(false);
     const [balance, setBalance] = useState(0);
     const [fee, setFee] = useState(0.000113);
@@ -33,7 +32,19 @@ function Withdrawal() {
     const [isSearching, setIsSearching] = useState(false);
     const [showSearchResults, setShowSearchResults] = useState(false);
     const [recentSearches, setRecentSearches] = useState([]);
-    const [keyboardFocusIndex, setKeyboardFocusIndex] = useState(-1);
+
+    // Add this line with your other useState declarations
+    const [transactionHistory, setTransactionHistory] = useState([]);
+
+    // Add this to the state variables in Withdrawal.js
+    const [addressBook, setAddressBook] = useState([]);
+    const [showAddressBook, setShowAddressBook] = useState(false);
+    const [addressBookSearchQuery, setAddressBookSearchQuery] = useState('');
+    const [editingAddress, setEditingAddress] = useState(null);
+    const [showAddAddressModal, setShowAddAddressModal] = useState(false);
+
+    // Add this with your other useState declarations (around line 36)
+    const [newAddressData, setNewAddressData] = useState(null);
 
     // Enhanced function to get proper display name from user data
     const getDisplayName = (user) => {
@@ -124,20 +135,6 @@ function Withdrawal() {
                             setBalance(parseFloat(btcBalance.balance));
                         }
                     }
-                }
-
-                // Fetch withdrawal history
-                const historyResponse = await fetch('http://localhost:8080/withdrawal/history', {
-                    method: 'GET',
-                    headers: {
-                        'Authorization': `Bearer ${token}`,
-                        'Content-Type': 'application/json',
-                    },
-                });
-
-                if (historyResponse.ok) {
-                    const historyData = await historyResponse.json();
-                    setWithdrawalHistory(historyData.withdrawals || []);
                 }
 
                 // NEW: Fetch withdrawable cryptocurrencies with withdrawal-specific info
@@ -270,6 +267,7 @@ function Withdrawal() {
 
     const handleSubmit = async () => {
         setApiError('');
+        setAddressError('');
 
         // Validate amount
         if (!withdrawalAmount || isNaN(parseFloat(withdrawalAmount)) || parseFloat(withdrawalAmount) <= 0) {
@@ -283,19 +281,51 @@ function Withdrawal() {
             return;
         }
 
-        // Validate address
-        if (!address || address.trim() === '') {
-            setApiError('Please enter a valid wallet address');
+        // Validate address - now with our new function
+        if (withdrawalType === 'on-chain') {
+            const validation = validateRecipientAddress(address, selectedCrypto);
+            if (!validation.isValid) {
+                setAddressError(validation.errorMessage);
+                return;
+            }
+
+            // Show warning to user if present
+            if (validation.warning) {
+                // Set as non-blocking warning that user can see
+                setAddressError(validation.warning); // This won't block submission now
+            }
+        } else {
+            // For internal transfers, just check that we have a recipient
+            if (!address || address.trim() === '') {
+                setAddressError('Please enter a recipient');
+                return;
+            }
+        }
+
+        // Check minimum withdrawal amount
+        const minWithdrawalAmount = getMinWithdrawalAmount();
+        if (parseFloat(withdrawalAmount) < minWithdrawalAmount) {
+            setApiError(`Minimum ${withdrawalType === 'internal' ? 'transfer' : 'withdrawal'} amount is ${minWithdrawalAmount} ${selectedCrypto}`);
             return;
         }
 
-        // Show confirmation modal
+        // If we passed all validations, show confirmation modal
         setIsConfirmationVisible(true);
     };
 
     // Update the confirmWithdrawal function
     const confirmWithdrawal = async () => {
         try {
+            // Re-validate the address as a safety measure
+            if (withdrawalType === 'on-chain') {
+                const validation = validateRecipientAddress(address, selectedCrypto);
+                if (!validation.isValid) {
+                    setApiError(validation.errorMessage);
+                    setIsConfirmationVisible(false);
+                    return;
+                }
+            }
+
             const token = localStorage.getItem('auth_token');
 
             if (withdrawalType === 'internal') {
@@ -359,7 +389,13 @@ function Withdrawal() {
                 });
 
                 if (response.ok) {
-                    // Rest of your existing code
+                    // After successful on-chain withdrawal, offer to save the address
+                    if (withdrawalType === 'on-chain') {
+                        setTimeout(() => {
+                            saveAddressAfterTransaction(address, selectedCrypto);
+                        }, 500);
+                    }
+
                     await response.json();
                     setWithdrawalAmount('');
                     setAddress('');
@@ -413,19 +449,6 @@ function Withdrawal() {
                         }
                     }
                 }
-            }
-
-            // Fetch updated withdrawal history
-            const historyResponse = await fetch('http://localhost:8080/withdrawal/history', {
-                headers: {
-                    'Authorization': `Bearer ${token}`,
-                    'Content-Type': 'application/json',
-                },
-            });
-
-            if (historyResponse.ok) {
-                const historyData = await historyResponse.json();
-                setWithdrawalHistory(historyData.withdrawals || []);
             }
         } catch (error) {
             console.error('Error refreshing data:', error);
@@ -541,9 +564,490 @@ function Withdrawal() {
         }
     }, []);
 
+    // Add this before the return statement in Withdrawal.js
+    const getMinWithdrawalAmount = () => {
+        if (withdrawalType === 'internal') {
+            // For internal transfers, use cryptocurrency-based minimums
+            switch (selectedCrypto) {
+                case 'BTC': return 0.00027;
+                case 'ETH': return 0.01;
+                case 'USDT': return 20;
+                default: return 0.01;
+            }
+        } else {
+            // For on-chain withdrawals, use network-specific minimums
+            return parseFloat(availableNetworks.find(n => n.network === chain)?.min_withdrawal || 0.00027);
+        }
+    };
+
+    // Add this method to Withdrawal.js
+    const fetchCompleteTransactionHistory = async () => {
+        try {
+            const token = localStorage.getItem('auth_token');
+            const response = await fetch('http://localhost:8080/transactions/history/all', {
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json',
+                },
+            });
+
+            if (response.ok) {
+                const data = await response.json();
+                setTransactionHistory(data.transactions);
+            } else {
+                console.error('Failed to fetch transaction history');
+            }
+        } catch (error) {
+            console.error('Error fetching transaction history:', error);
+        }
+    };
+
+    useEffect(() => {
+        // Other fetching code...
+        fetchCompleteTransactionHistory();
+    }, []);
+
+    // Add this useEffect to load addresses from localStorage on component mount
+    useEffect(() => {
+        const storedAddresses = localStorage.getItem('crypto_address_book');
+        if (storedAddresses) {
+            try {
+                const parsedAddresses = JSON.parse(storedAddresses);
+                setAddressBook(parsedAddresses);
+            } catch (e) {
+                console.error('Error parsing address book data', e);
+            }
+        }
+    }, []);
+
+    // Add this to your state variables
+    const [addressError, setAddressError] = useState('');
+
     if (isLoading) {
         return <div className="loading-container">Loading...</div>;
     }
+
+    const AddressBookModal = () => {
+        const [sortBy, setSortBy] = useState('lastUsed');
+
+        const filteredAndSortedAddresses = useMemo(() => {
+            const searchQuery = addressBookSearchQuery.toLowerCase();
+
+            // First filter - removed cryptocurrency filtering
+            const filtered = addressBook.filter(addr =>
+            (addr.label.toLowerCase().includes(searchQuery) ||
+                addr.address.toLowerCase().includes(searchQuery))
+            );
+
+            // Then sort
+            return [...filtered].sort((a, b) => {
+                switch (sortBy) {
+                    case 'lastUsed':
+                        const dateA = a.lastUsed ? new Date(a.lastUsed).getTime() : 0;
+                        const dateB = b.lastUsed ? new Date(b.lastUsed).getTime() : 0;
+                        return dateB - dateA;
+
+                    case 'label':
+                        return a.label.localeCompare(b.label);
+
+                    case 'cryptocurrency':
+                        return a.cryptocurrency.localeCompare(b.cryptocurrency);
+
+                    default:
+                        return 0;
+                }
+            });
+            // eslint-disable-next-line react-hooks/exhaustive-deps
+        }, [sortBy, addressBookSearchQuery.toLowerCase()]); // Fixed dependency array
+
+        return (
+            <div className="modal-overlay">
+                <div className="address-book-modal">
+                    <div className="address-book-header">
+                        <h2>Address Book</h2>
+                        <button className="close-modal-btn" onClick={() => setShowAddressBook(false)}>×</button>
+                    </div>
+
+                    <div className="address-book-search">
+                        <input
+                            type="text"
+                            placeholder="Search addresses..."
+                            value={addressBookSearchQuery}
+                            onChange={(e) => setAddressBookSearchQuery(e.target.value)}
+                            className="form-input"
+                        />
+                        <button
+                            className="add-address-btn"
+                            onClick={() => {
+                                setEditingAddress(null);
+                                setShowAddAddressModal(true);
+                            }}
+                        >
+                            + Add New Address
+                        </button>
+                    </div>
+
+                    <div className="address-sort-options">
+                        <label>Sort by: </label>
+                        <select
+                            value={sortBy}
+                            onChange={(e) => setSortBy(e.target.value)}
+                            className="sort-select"
+                        >
+                            <option value="lastUsed">Recently Used</option>
+                            <option value="label">Label (A-Z)</option>
+                            <option value="cryptocurrency">Cryptocurrency</option>
+                        </select>
+                    </div>
+
+                    <div className="address-list">
+                        {filteredAndSortedAddresses.length > 0 ? (
+                            filteredAndSortedAddresses.map((addr) => (
+                                <div key={addr.id} className="address-item">
+                                    <div className="address-details" onClick={() => selectAddress(addr)}>
+                                        <div className="address-label">{addr.label}</div>
+                                        <div className="address-crypto-badge">{addr.cryptocurrency}</div>
+                                        <div className="address-value">{formatAddress(addr.address)}</div>
+                                        {addr.notes && <div className="address-notes">{addr.notes}</div>}
+                                    </div>
+                                    <div className="address-actions">
+                                        <button
+                                            className="edit-address"
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                setEditingAddress(addr);
+                                                setShowAddAddressModal(true);
+                                            }}
+                                        >
+                                            Edit
+                                        </button>
+                                        <button
+                                            className="delete-address"
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                deleteAddress(addr.id);
+                                            }}
+                                        >
+                                            Delete
+                                        </button>
+                                    </div>
+                                </div>
+                            ))
+                        ) : (
+                            <div className="no-addresses">
+                                {addressBookSearchQuery ?
+                                    "No addresses match your search" :
+                                    "No saved addresses. Add addresses to your address book for quick access."}
+                            </div>
+                        )}
+                    </div>
+                </div>
+            </div>
+        );
+    };
+
+    const AddAddressModal = () => {
+        const [addressData, setAddressData] = useState({
+            label: editingAddress?.label || newAddressData?.label || '',
+            address: editingAddress?.address || newAddressData?.address || '',
+            cryptocurrency: editingAddress?.cryptocurrency || newAddressData?.cryptocurrency || selectedCrypto,
+            notes: editingAddress?.notes || newAddressData?.notes || ''
+        });
+
+        const [validationError, setValidationError] = useState('');
+
+        const handleSave = () => {
+            // Validate data
+            if (!addressData.label.trim()) {
+                setValidationError('Please enter a label for this address');
+                return;
+            }
+
+            if (!addressData.address.trim()) {
+                setValidationError('Please enter an address');
+                return;
+            }
+
+            // Use our enhanced validation function
+            const validation = validateRecipientAddress(addressData.address, addressData.cryptocurrency);
+            if (!validation.isValid) {
+                setValidationError(validation.errorMessage);
+                return;
+            }
+
+            // Proceed with save if validation passes...
+            if (editingAddress) {
+                // Update existing address
+                const updatedAddressBook = addressBook.map(addr =>
+                    addr.id === editingAddress.id ? { ...addressData, id: addr.id } : addr
+                );
+                setAddressBook(updatedAddressBook);
+                localStorage.setItem('crypto_address_book', JSON.stringify(updatedAddressBook));
+            } else {
+                // Add new address
+                const newAddress = {
+                    ...addressData,
+                    id: Date.now().toString(),
+                    createdAt: new Date().toISOString()
+                };
+                const updatedAddressBook = [...addressBook, newAddress];
+                setAddressBook(updatedAddressBook);
+                localStorage.setItem('crypto_address_book', JSON.stringify(updatedAddressBook));
+            }
+
+            setShowAddAddressModal(false);
+            setEditingAddress(null);
+        };
+
+        // Add this to clear newAddressData when modal is closed
+        const closeModal = () => {
+            setShowAddAddressModal(false);
+            setEditingAddress(null);
+            setNewAddressData(null);
+        };
+
+        return (
+            <div className="modal-overlay">
+                <div className="add-address-modal">
+                    <div className="modal-header">
+                        <h2>{editingAddress ? 'Edit Address' : 'Add New Address'}</h2>
+                        <button
+                            className="close-modal-btn"
+                            onClick={closeModal}
+                        >
+                            ×
+                        </button>
+                    </div>
+
+                    <div className="form-group">
+                        <label>Label</label>
+                        <input
+                            type="text"
+                            placeholder="E.g., My Hardware Wallet"
+                            value={addressData.label}
+                            onChange={(e) => setAddressData({ ...addressData, label: e.target.value })}
+                            className="form-input"
+                        />
+                    </div>
+
+                    <div className="form-group">
+                        <label>Cryptocurrency</label>
+                        <select
+                            value={addressData.cryptocurrency}
+                            onChange={(e) => setAddressData({ ...addressData, cryptocurrency: e.target.value })}
+                            className="form-select"
+                        >
+                            {availableCryptocurrencies.map(crypto => (
+                                <option key={crypto.symbol} value={crypto.symbol}>
+                                    {crypto.symbol} - {crypto.name}
+                                </option>
+                            ))}
+                        </select>
+                    </div>
+
+                    <div className="form-group">
+                        <label>Address</label>
+                        <input
+                            type="text"
+                            placeholder={`Enter ${addressData.cryptocurrency} address`}
+                            value={addressData.address}
+                            onChange={(e) => setAddressData({ ...addressData, address: e.target.value })}
+                            className="form-input"
+                        />
+                    </div>
+
+                    <div className="form-group">
+                        <label>Notes (Optional)</label>
+                        <textarea
+                            placeholder="Add any notes about this address"
+                            value={addressData.notes}
+                            onChange={(e) => setAddressData({ ...addressData, notes: e.target.value })}
+                            className="form-textarea"
+                        />
+                    </div>
+
+                    {validationError && (
+                        <div className="error-message">{validationError}</div>
+                    )}
+
+                    <div className="modal-actions">
+                        <button
+                            className="cancel-btn"
+                            onClick={closeModal}
+                        >
+                            Cancel
+                        </button>
+                        <button className="save-btn" onClick={handleSave}>
+                            {editingAddress ? 'Update' : 'Save'} Address
+                        </button>
+                    </div>
+                </div>
+            </div>
+        );
+    };
+
+    // Corrected formatAddress function
+    const formatAddress = (address) => {
+        if (!address) return '';
+        if (address.length <= 16) return address;
+        return `${address.substring(0, 8)}...${address.substring(address.length - 8)}`;
+    };
+
+    // Delete an address from the address book
+    const deleteAddress = (addressId) => {
+        if (window.confirm('Are you sure you want to delete this address?')) {
+            const updatedAddressBook = addressBook.filter(addr => addr.id !== addressId);
+            setAddressBook(updatedAddressBook);
+            localStorage.setItem('crypto_address_book', JSON.stringify(updatedAddressBook));
+        }
+    };
+
+    // Select an address from the address book
+    const selectAddress = (addr) => {
+        setAddress(addr.address);
+        setShowAddressBook(false);
+
+        // Update the address's last used timestamp
+        const updatedAddressBook = addressBook.map(item =>
+            item.id === addr.id ? { ...item, lastUsed: new Date().toISOString() } : item
+        );
+        setAddressBook(updatedAddressBook);
+        localStorage.setItem('crypto_address_book', JSON.stringify(updatedAddressBook));
+    };
+
+    /**
+     * Validates cryptocurrency wallet addresses with more accurate patterns
+     * 
+     * @param {string} address - The wallet address to validate
+     * @param {string} cryptocurrency - The cryptocurrency symbol (BTC, ETH, etc.)
+     * @return {Object} - { isValid: boolean, errorMessage: string|null, warning: string|null }
+     */
+    const validateRecipientAddress = (address, cryptocurrency) => {
+        // Basic input validation
+        if (!address) {
+            return {
+                isValid: false,
+                errorMessage: "Address cannot be empty"
+            };
+        }
+
+        if (!cryptocurrency) {
+            return {
+                isValid: false,
+                errorMessage: "Cryptocurrency not specified"
+            };
+        }
+
+        const trimmedAddress = address.trim();
+
+        // Empty check after trimming
+        if (trimmedAddress.length === 0) {
+            return {
+                isValid: false,
+                errorMessage: "Address cannot be empty"
+            };
+        }
+
+        // Check for common invalid characters (spaces, special characters)
+        if (/\s/.test(trimmedAddress)) {
+            return {
+                isValid: false,
+                errorMessage: "Address cannot contain spaces"
+            };
+        }
+
+        // Bitcoin address validation with improved regex patterns
+        if (cryptocurrency === 'BTC') {
+            // P2PKH addresses (Legacy) - start with '1'
+            if (trimmedAddress.startsWith('1')) {
+                // More permissive pattern for P2PKH
+                if (!/^1[a-km-zA-HJ-NP-Z1-9]{25,34}$/.test(trimmedAddress)) {
+                    return {
+                        isValid: false,
+                        errorMessage: "Invalid Bitcoin P2PKH address format"
+                    };
+                }
+            }
+            // P2SH addresses - start with '3'
+            else if (trimmedAddress.startsWith('3')) {
+                // More permissive pattern for P2SH
+                if (!/^3[a-km-zA-HJ-NP-Z1-9]{25,34}$/.test(trimmedAddress)) {
+                    return {
+                        isValid: false,
+                        errorMessage: "Invalid Bitcoin P2SH address format"
+                    };
+                }
+            }
+            // Bech32 addresses (Segwit) - start with 'bc1'
+            else if (trimmedAddress.startsWith('bc1')) {
+                // More permissive pattern for Bech32
+                if (!/^bc1[a-zA-HJ-NP-Z0-9]{8,87}$/.test(trimmedAddress)) {
+                    return {
+                        isValid: false,
+                        errorMessage: "Invalid Bitcoin Bech32 address format"
+                    };
+                }
+            } else {
+                return {
+                    isValid: false,
+                    errorMessage: "Bitcoin address must start with '1', '3', or 'bc1'"
+                };
+            }
+
+            return {
+                isValid: true,
+                errorMessage: null
+            };
+        }
+        // Ethereum and all other cryptocurrencies
+        else {
+            // All non-BTC addresses use Ethereum format (as specified in requirements)
+            if (!/^0x[a-fA-F0-9]{40}$/.test(trimmedAddress)) {
+                return {
+                    isValid: false,
+                    errorMessage: `${cryptocurrency} address must be a 42-character hexadecimal string starting with '0x'`
+                };
+            }
+
+            // Additional check for checksum format in Ethereum addresses
+            if (/^0x[a-f0-9]{40}$|^0x[A-F0-9]{40}$/.test(trimmedAddress)) {
+                // If address is all lowercase or all uppercase, it's not checksummed
+                // This is allowed but generates a warning
+                return {
+                    isValid: true,
+                    errorMessage: null,
+                    warning: "Address is not checksummed. This is acceptable but not recommended."
+                };
+            }
+
+            // If we reach here, it's a valid (likely checksummed) Ethereum address
+            return {
+                isValid: true,
+                errorMessage: null
+            };
+        }
+    };
+
+    // Save a new address after a successful transaction
+    const saveAddressAfterTransaction = (transactionAddress, crypto) => {
+        // Check if address already exists in address book
+        const existingAddress = addressBook.find(addr =>
+            addr.address === transactionAddress && addr.cryptocurrency === crypto
+        );
+
+        if (!existingAddress && transactionAddress) {
+            // Show dialog to save the address
+            if (window.confirm('Would you like to save this address to your address book?')) {
+                setNewAddressData({
+                    label: '',
+                    address: transactionAddress,
+                    cryptocurrency: crypto,
+                    notes: ''
+                });
+                setShowAddAddressModal(true);
+            }
+        }
+    };
 
     return (
         <div className="dashboard-container">
@@ -751,156 +1255,61 @@ function Withdrawal() {
                                         type="text"
                                         placeholder="Enter recipient address"
                                         value={address}
-                                        onChange={(e) => setAddress(e.target.value)}
-                                        className="form-input"
+                                        onChange={(e) => {
+                                            const newAddress = e.target.value;
+                                            setAddress(newAddress);
+
+                                            // Clear any existing errors when the user types
+                                            if (addressError) {
+                                                setAddressError('');
+                                            }
+
+                                            // Only validate if there's some content and it's on-chain withdrawal
+                                            if (newAddress.trim() && withdrawalType === 'on-chain' && newAddress.length > 10) {
+                                                const validation = validateRecipientAddress(newAddress, selectedCrypto);
+                                                if (!validation.isValid) {
+                                                    setAddressError(validation.errorMessage);
+                                                } else if (validation.warning) {
+                                                    setAddressError(validation.warning);
+                                                }
+                                            }
+
+                                            // Auto-detect cryptocurrency when an address is pasted
+                                            if (newAddress.length > 30) { // Only check longer addresses
+                                                if (newAddress.startsWith('1') || newAddress.startsWith('3') || newAddress.startsWith('bc1')) {
+                                                    if (selectedCrypto !== 'BTC') {
+                                                        if (window.confirm("This appears to be a Bitcoin address. Would you like to switch to BTC?")) {
+                                                            handleCryptoChange('BTC');
+                                                        }
+                                                    }
+                                                } else if (newAddress.startsWith('0x')) {
+                                                    // If it's an ETH address but we're on BTC, suggest switching
+                                                    if (selectedCrypto === 'BTC') {
+                                                        if (window.confirm("This appears to be an Ethereum-style address. Would you like to switch to ETH?")) {
+                                                            handleCryptoChange('ETH');
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }}
+                                        className={`form-input ${addressError && addressError.includes('not recommended') ? 'input-warning' : addressError ? 'input-error' : ''}`}
                                     />
-                                    <button className="address-book-btn">Address Book</button>
+                                    {addressError && (
+                                        <div className={addressError.includes('not recommended') ? 'input-warning-message' : 'input-error-message'}>
+                                            {addressError}
+                                        </div>
+                                    )}
+                                    <button
+                                        className="address-book-btn"
+                                        onClick={() => setShowAddressBook(true)}
+                                    >
+                                        Address Book
+                                    </button>
                                 </div>
                             ) : (
                                 <div className="address-input-container">
-                                    <div className="user-search-container">
-                                        <div className="search-input-wrapper">
-                                            <span className="search-icon">
-                                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                                    <circle cx="11" cy="11" r="8"></circle>
-                                                    <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
-                                                </svg>
-                                            </span>
-                                            <input
-                                                type="text"
-                                                placeholder="Search by username or email..."
-                                                value={searchQuery}
-                                                onChange={(e) => {
-                                                    setSearchQuery(e.target.value);
-                                                    if (e.target.value) {
-                                                        setShowSearchResults(true);
-                                                    }
-                                                    if (e.target.value.length < 2) {
-                                                        setSearchResults([]);
-                                                    }
-                                                }}
-                                                onClick={() => {
-                                                    if (searchQuery) {
-                                                        setShowSearchResults(true);
-                                                    }
-                                                }}
-                                                onKeyDown={(e) => {
-                                                    const results = document.querySelectorAll('.search-result-item');
-                                                    let currentFocus = Array.from(results).findIndex(el =>
-                                                        el.classList.contains('keyboard-focus')
-                                                    );
-
-                                                    // Handle arrow keys for navigation
-                                                    if (e.key === 'ArrowDown') {
-                                                        e.preventDefault();
-                                                        const nextIndex = currentFocus < 0 ? 0 : (currentFocus + 1) % results.length;
-                                                        results.forEach((item, i) => {
-                                                            item.classList.toggle('keyboard-focus', i === nextIndex);
-                                                        });
-                                                    } else if (e.key === 'ArrowUp') {
-                                                        e.preventDefault();
-                                                        const prevIndex = currentFocus < 0 ? results.length - 1 :
-                                                            (currentFocus - 1 + results.length) % results.length;
-                                                        results.forEach((item, i) => {
-                                                            item.classList.toggle('keyboard-focus', i === prevIndex);
-                                                        });
-                                                    } else if (e.key === 'Enter') {
-                                                        e.preventDefault();
-                                                        const focused = document.querySelector('.search-result-item.keyboard-focus');
-                                                        if (focused) {
-                                                            const userId = focused.getAttribute('data-user-id');
-                                                            const user = searchResults.find(u => u.id.toString() === userId);
-                                                            if (user) {
-                                                                selectRecipient(user);
-                                                            }
-                                                        }
-                                                    } else if (e.key === 'Escape') {
-                                                        setShowSearchResults(false);
-                                                    }
-                                                }}
-                                                className="search-input form-input"
-                                            />
-                                            {searchQuery && (
-                                                <button
-                                                    className="clear-search"
-                                                    onClick={() => {
-                                                        setSearchQuery('');
-                                                        setSearchResults([]);
-                                                    }}
-                                                    aria-label="Clear search"
-                                                >
-                                                    ✕
-                                                </button>
-                                            )}
-                                        </div>
-
-                                        {isSearching && <div className="search-loading">Searching</div>}
-
-                                        {showSearchResults && (
-                                            <div className="search-results">
-                                                {searchQuery.length < 2 ? (
-                                                    <div className="search-hint">Type at least 2 characters to search</div>
-                                                ) : searchResults.length > 0 ? (
-                                                    searchResults.map((user) => (
-                                                        <div
-                                                            key={user.id}
-                                                            data-user-id={user.id}
-                                                            className="search-result-item"
-                                                            onClick={() => selectRecipient(user)}
-                                                        >
-                                                            <div className="user-avatar">
-                                                                {user.username?.[0] || user.email?.[0] || "U"}
-                                                            </div>
-                                                            <div className="user-details">
-                                                                <div className="user-name">{user.username}</div>
-                                                                <div className="user-email">{user.email}</div>
-                                                            </div>
-                                                        </div>
-                                                    ))
-                                                ) : !isSearching && (
-                                                    <div className="no-results">
-                                                        No users found matching "{searchQuery}"
-                                                    </div>
-                                                )}
-                                            </div>
-                                        )}
-
-                                        {!searchQuery && recentSearches && recentSearches.length > 0 && (
-                                            <div className="recent-searches">
-                                                <div className="recent-searches-header">
-                                                    <span className="recent-searches-title">Recent searches</span>
-                                                    <button
-                                                        className="clear-recent"
-                                                        onClick={() => {
-                                                            setRecentSearches([]);
-                                                            localStorage.setItem('recentUserSearches', JSON.stringify([]));
-                                                        }}
-                                                    >
-                                                        Clear all
-                                                    </button>
-                                                </div>
-                                                <div className="recent-search-items">
-                                                    {recentSearches.slice(0, 5).map((user) => (
-                                                        <div
-                                                            key={user.id}
-                                                            className="recent-search-item"
-                                                            onClick={() => {
-                                                                setSearchQuery(user.username || user.email);
-                                                                searchUsers(user.username || user.email);
-                                                            }}
-                                                        >
-                                                            <div className="recent-search-avatar">
-                                                                {user.username?.[0] || user.email?.[0] || "U"}
-                                                            </div>
-                                                            {user.username || user.email}
-                                                        </div>
-                                                    ))}
-                                                </div>
-                                            </div>
-                                        )}
-                                    </div>
-
-                                    {selectedRecipient && (
+                                    {selectedRecipient ? (
+                                        // Show selected recipient first when available
                                         <div className="selected-recipient">
                                             <div className="recipient-header">
                                                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -929,6 +1338,149 @@ function Withdrawal() {
                                                 </div>
                                             </div>
                                         </div>
+                                    ) : (
+                                        // Show search container if no recipient is selected
+                                        <div className="user-search-container">
+                                            <div className="search-input-wrapper">
+                                                <span className="search-icon">
+                                                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                                        <circle cx="11" cy="11" r="8"></circle>
+                                                        <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                                                    </svg>
+                                                </span>
+                                                <input
+                                                    type="text"
+                                                    placeholder="Search by username or email..."
+                                                    value={searchQuery}
+                                                    onChange={(e) => {
+                                                        setSearchQuery(e.target.value);
+                                                        if (e.target.value) {
+                                                            setShowSearchResults(true);
+                                                        }
+                                                        if (e.target.value.length < 2) {
+                                                            setSearchResults([]);
+                                                        }
+                                                    }}
+                                                    onClick={() => {
+                                                        if (searchQuery) {
+                                                            setShowSearchResults(true);
+                                                        }
+                                                    }}
+                                                    onKeyDown={(e) => {
+                                                        const results = document.querySelectorAll('.search-result-item');
+                                                        let currentFocus = Array.from(results).findIndex(el =>
+                                                            el.classList.contains('keyboard-focus')
+                                                        );
+
+                                                        // Handle arrow keys for navigation
+                                                        if (e.key === 'ArrowDown') {
+                                                            e.preventDefault();
+                                                            const nextIndex = currentFocus < 0 ? 0 : (currentFocus + 1) % results.length;
+                                                            results.forEach((item, i) => {
+                                                                item.classList.toggle('keyboard-focus', i === nextIndex);
+                                                            });
+                                                        } else if (e.key === 'ArrowUp') {
+                                                            e.preventDefault();
+                                                            const prevIndex = currentFocus < 0 ? results.length - 1 :
+                                                                (currentFocus - 1 + results.length) % results.length;
+                                                            results.forEach((item, i) => {
+                                                                item.classList.toggle('keyboard-focus', i === prevIndex);
+                                                            });
+                                                        } else if (e.key === 'Enter') {
+                                                            e.preventDefault();
+                                                            const focused = document.querySelector('.search-result-item.keyboard-focus');
+                                                            if (focused) {
+                                                                const userId = focused.getAttribute('data-user-id');
+                                                                const user = searchResults.find(u => u.id.toString() === userId);
+                                                                if (user) {
+                                                                    selectRecipient(user);
+                                                                }
+                                                            }
+                                                        } else if (e.key === 'Escape') {
+                                                            setShowSearchResults(false);
+                                                        }
+                                                    }}
+                                                    className="search-input form-input"
+                                                />
+                                                {searchQuery && (
+                                                    <button
+                                                        className="clear-search"
+                                                        onClick={() => {
+                                                            setSearchQuery('');
+                                                            setSearchResults([]);
+                                                        }}
+                                                        aria-label="Clear search"
+                                                    >
+                                                        ✕
+                                                    </button>
+                                                )}
+                                            </div>
+
+                                            {isSearching && <div className="search-loading">Searching</div>}
+
+                                            {showSearchResults && (
+                                                <div className="search-results">
+                                                    {searchQuery.length < 2 ? (
+                                                        <div className="search-hint">Type at least 2 characters to search</div>
+                                                    ) : searchResults.length > 0 ? (
+                                                        searchResults.map((user) => (
+                                                            <div
+                                                                key={user.id}
+                                                                data-user-id={user.id}
+                                                                className="search-result-item"
+                                                                onClick={() => selectRecipient(user)}
+                                                            >
+                                                                <div className="user-avatar">
+                                                                    {user.username?.[0] || user.email?.[0] || "U"}
+                                                                </div>
+                                                                <div className="user-details">
+                                                                    <div className="user-name">{user.username}</div>
+                                                                    <div className="user-email">{user.email}</div>
+                                                                </div>
+                                                            </div>
+                                                        ))
+                                                    ) : !isSearching && (
+                                                        <div className="no-results">
+                                                            No users found matching "{searchQuery}"
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            )}
+
+                                            {!searchQuery && recentSearches && recentSearches.length > 0 && (
+                                                <div className="recent-searches">
+                                                    <div className="recent-searches-header">
+                                                        <span className="recent-searches-title">Recent searches</span>
+                                                        <button
+                                                            className="clear-recent"
+                                                            onClick={() => {
+                                                                setRecentSearches([]);
+                                                                localStorage.setItem('recentUserSearches', JSON.stringify([]));
+                                                            }}
+                                                        >
+                                                            Clear all
+                                                        </button>
+                                                    </div>
+                                                    <div className="recent-search-items">
+                                                        {recentSearches.slice(0, 5).map((user) => (
+                                                            <div
+                                                                key={user.id}
+                                                                className="recent-search-item"
+                                                                onClick={() => {
+                                                                    setSearchQuery(user.username || user.email);
+                                                                    searchUsers(user.username || user.email);
+                                                                }}
+                                                            >
+                                                                <div className="recent-search-avatar">
+                                                                    {user.username?.[0] || user.email?.[0] || "U"}
+                                                                </div>
+                                                                {user.username || user.email}
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                </div>
+                                            )}
+                                        </div>
                                     )}
                                 </div>
                             )}
@@ -952,6 +1504,14 @@ function Withdrawal() {
                             </div>
                         </div>
 
+                        {withdrawalAmount && !isNaN(parseFloat(withdrawalAmount)) &&
+                            parseFloat(withdrawalAmount) > 0 &&
+                            parseFloat(withdrawalAmount) < getMinWithdrawalAmount() && (
+                                <div className="input-error">
+                                    Amount below minimum ({getMinWithdrawalAmount()} {selectedCrypto})
+                                </div>
+                            )}
+
                         <div className="fee-section">
                             <div className="fee-item">
                                 <span>Transaction Fee:</span>
@@ -973,9 +1533,16 @@ function Withdrawal() {
                             <button
                                 className="withdraw-button"
                                 onClick={handleSubmit}
-                                disabled={!selectedWallet || !withdrawalAmount || isNaN(parseFloat(withdrawalAmount)) || parseFloat(withdrawalAmount) <= 0 || !address}
+                                disabled={
+                                    !selectedWallet ||
+                                    !withdrawalAmount ||
+                                    isNaN(parseFloat(withdrawalAmount)) ||
+                                    parseFloat(withdrawalAmount) <= 0 ||
+                                    parseFloat(withdrawalAmount) < getMinWithdrawalAmount() ||
+                                    !address
+                                }
                             >
-                                Withdraw {withdrawalAmount || '0'} {selectedCrypto}
+                                {withdrawalType === 'internal' ? 'Transfer' : 'Withdraw'} {withdrawalAmount || '0'} {selectedCrypto}
                             </button>
                         </div>
 
@@ -983,13 +1550,14 @@ function Withdrawal() {
                             <div className="error-message">{apiError}</div>
                         )}
 
-                        <div className="withdrawal-history-section">
-                            <h2>Withdrawal History</h2>
-                            {withdrawalHistory && withdrawalHistory.length > 0 ? (
-                                <table className="withdrawal-history-table">
+                        <div className="transaction-history-section">
+                            <h2>Transaction History</h2>
+                            {transactionHistory && transactionHistory.length > 0 ? (
+                                <table className="transaction-history-table">
                                     <thead>
                                         <tr>
                                             <th>Date</th>
+                                            <th>Type</th>
                                             <th>Cryptocurrency</th>
                                             <th>Amount</th>
                                             <th>Address</th>
@@ -998,19 +1566,29 @@ function Withdrawal() {
                                         </tr>
                                     </thead>
                                     <tbody>
-                                        {withdrawalHistory.map((withdrawal, index) => (
+                                        {transactionHistory.map((tx, index) => (
                                             <tr key={index}>
-                                                <td>{new Date(withdrawal.created_at).toLocaleString()}</td>
-                                                <td>{withdrawal.cryptocurrency}</td>
-                                                <td>{parseFloat(withdrawal.amount).toFixed(8)}</td>
-                                                <td className="address-cell">
-                                                    {withdrawal.address.substring(0, 6)}...
-                                                    {withdrawal.address.substring(withdrawal.address.length - 6)}
-                                                </td>
-                                                <td>{withdrawal.blockchain || 'Internal'}</td>
+                                                <td>{new Date(tx.created_at).toLocaleString()}</td>
                                                 <td>
-                                                    <span className={`status-badge ${withdrawal.status.toLowerCase()}`}>
-                                                        {withdrawal.status}
+                                                    <span className={`transaction-type ${tx.transaction_type}`}>
+                                                        {tx.transaction_type === 'withdrawal' ? 'Withdrawal' :
+                                                            tx.transaction_type === 'transfer' && tx.is_internal ? 'Internal Transfer' :
+                                                                tx.transaction_type === 'transfer' ? 'Transfer' : 'Deposit'}
+                                                    </span>
+                                                </td>
+                                                <td>{tx.cryptocurrency}</td>
+                                                <td className="amount-cell">
+                                                    {parseFloat(tx.amount).toFixed(8)}
+                                                </td>
+                                                <td className="address-cell">
+                                                    {tx.address ?
+                                                        `${tx.address.substring(0, 6)}...${tx.address.substring(tx.address.length - 6)}` :
+                                                        'N/A'}
+                                                </td>
+                                                <td>{tx.blockchain || 'Internal'}</td>
+                                                <td>
+                                                    <span className={`status-badge ${tx.status.toLowerCase()}`}>
+                                                        {tx.status}
                                                     </span>
                                                 </td>
                                             </tr>
@@ -1019,7 +1597,7 @@ function Withdrawal() {
                                 </table>
                             ) : (
                                 <div className="no-history-message">
-                                    No withdrawal history found
+                                    No transaction history found
                                 </div>
                             )}
                         </div>
@@ -1101,6 +1679,12 @@ function Withdrawal() {
                     © 2025 CryptoX Exchange. All rights reserved.
                 </div>
             </footer>
+
+            {/* Address Book Modal */}
+            {showAddressBook && <AddressBookModal />}
+
+            {/* Add Address Modal */}
+            {showAddAddressModal && <AddAddressModal />}
         </div>
     );
 }

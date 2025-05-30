@@ -5,7 +5,8 @@
     margin-bottom: 30px;
     box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
     border: 1px solid #2e3444;
-    max-width: 900px;
+    max-width: 1100px;
+    /* Increased from 900px */
     margin-left: auto;
     margin-right: auto;
 }
@@ -120,6 +121,9 @@
 .address-input-container {
     display: flex;
     gap: 10px;
+    justify-content: center;
+    /* Center the content */
+    max-width: 100%;
 }
 
 .address-input-container .form-input {
@@ -328,13 +332,61 @@
 .withdrawal-history-table {
     width: 100%;
     border-collapse: collapse;
+    table-layout: fixed;
+    /* Better column width control */
 }
 
 .withdrawal-history-table th,
 .withdrawal-history-table td {
-    padding: 12px;
+    padding: 12px 10px;
     text-align: left;
     border-bottom: 1px solid #2e3444;
+    white-space: nowrap;
+    /* Prevent wrapping by default */
+}
+
+.withdrawal-history-table th:nth-child(1),
+/* Date */
+.withdrawal-history-table td:nth-child(1) {
+    width: 16%;
+}
+
+.withdrawal-history-table th:nth-child(2),
+/* Type */
+.withdrawal-history-table td:nth-child(2) {
+    width: 12%;
+}
+
+.withdrawal-history-table th:nth-child(3),
+/* Cryptocurrency */
+.withdrawal-history-table td:nth-child(3) {
+    width: 10%;
+}
+
+.withdrawal-history-table th:nth-child(4),
+/* Amount */
+.withdrawal-history-table td:nth-child(4) {
+    width: 12%;
+}
+
+.withdrawal-history-table th:nth-child(5),
+/* Address */
+.withdrawal-history-table td:nth-child(5) {
+    width: 20%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.withdrawal-history-table th:nth-child(6),
+/* Network */
+.withdrawal-history-table td:nth-child(6) {
+    width: 15%;
+}
+
+.withdrawal-history-table th:nth-child(7),
+/* Status */
+.withdrawal-history-table td:nth-child(7) {
+    width: 10%;
 }
 
 .withdrawal-history-table th {
@@ -350,6 +402,7 @@
 .address-cell {
     font-family: monospace;
     color: #b0b0b0;
+    font-size: 13px;
 }
 
 .status-badge {
@@ -585,6 +638,9 @@
 .user-search-container {
     position: relative;
     width: 100%;
+    /* Reduced from 100% */
+    margin: 0 auto;
+    /* Center the search bar */
 }
 
 .search-input-wrapper {
@@ -763,7 +819,8 @@
 }
 
 .selected-recipient {
-    margin-top: 15px;
+    margin-top: 0;
+    margin-bottom: 10px;
     padding: 15px;
     background-color: #2a3144;
     border-radius: 8px;
@@ -771,6 +828,10 @@
     display: flex;
     flex-direction: column;
     position: relative;
+    width: 85%;
+    /* Match the width of the search container */
+    margin-left: auto;
+    margin-right: auto;
 }
 
 .remove-recipient {
@@ -910,4 +971,364 @@
     margin-right: 8px;
     flex-shrink: 0;
     font-size: 10px;
+}
+
+.crypto-search {
+    position: relative;
+    width: 97%;
+}
+
+/* Update transaction history section styling */
+.transaction-history-section {
+    margin-top: 30px;
+    width: 100%;
+    /* Ensure full width usage */
+    overflow-x: auto;
+    /* Add horizontal scroll for small screens */
+}
+
+/* Make transaction table utilize more width */
+.transaction-history-table {
+    width: 100%;
+    border-collapse: collapse;
+    table-layout: fixed;
+    /* Better column width control */
+}
+
+/* Adjust column widths for better readability */
+.transaction-history-table th,
+.transaction-history-table td {
+    padding: 12px 10px;
+    text-align: left;
+    border-bottom: 1px solid #2e3444;
+    white-space: nowrap;
+    /* Prevent wrapping by default */
+}
+
+/* Specific column widths */
+.transaction-history-table th:nth-child(1),
+/* Date */
+.transaction-history-table td:nth-child(1) {
+    width: 16%;
+}
+
+.transaction-history-table th:nth-child(2),
+/* Type */
+.transaction-history-table td:nth-child(2) {
+    width: 12%;
+}
+
+.transaction-history-table th:nth-child(3),
+/* Cryptocurrency */
+.transaction-history-table td:nth-child(3) {
+    width: 10%;
+}
+
+.transaction-history-table th:nth-child(4),
+/* Amount */
+.transaction-history-table td:nth-child(4) {
+    width: 12%;
+}
+
+.transaction-history-table th:nth-child(5),
+/* Address */
+.transaction-history-table td:nth-child(5) {
+    width: 20%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.transaction-history-table th:nth-child(6),
+/* Network */
+.transaction-history-table td:nth-child(6) {
+    width: 15%;
+}
+
+.transaction-history-table th:nth-child(7),
+/* Status */
+.transaction-history-table td:nth-child(7) {
+    width: 10%;
+}
+
+/* Optional: Increase the withdrawal container max-width */
+.withdrawal-container {
+    max-width: 1100px;
+    /* Increased from 900px */
+}
+
+/* Make address cell content more readable */
+.address-cell {
+    font-family: monospace;
+    color: #b0b0b0;
+    font-size: 13px;
+}
+
+/* Add a subtle hover effect for better readability */
+.transaction-history-table tbody tr:hover {
+    background-color: rgba(61, 69, 89, 0.2);
+}
+
+/* Address Book Styles */
+.address-book-modal {
+    background-color: #1a1f2a;
+    border-radius: 12px;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+    border: 1px solid #2e3444;
+    padding: 24px;
+    width: 600px;
+    max-width: 90%;
+    max-height: 80vh;
+    overflow-y: auto;
+}
+
+.address-book-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+}
+
+.address-book-header h2 {
+    font-size: 22px;
+    color: #ffffff;
+    margin: 0;
+}
+
+.close-modal-btn {
+    background: none;
+    border: none;
+    color: #b0b0b0;
+    font-size: 24px;
+    cursor: pointer;
+}
+
+.address-book-search {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 16px;
+}
+
+.address-book-search .form-input {
+    flex: 1;
+}
+
+.add-address-btn {
+    background-color: #f0b90b;
+    color: #1a1f2a;
+    border: none;
+    border-radius: 6px;
+    padding: 0 15px;
+    font-weight: 600;
+    cursor: pointer;
+    white-space: nowrap;
+}
+
+.address-list {
+    max-height: 400px;
+    overflow-y: auto;
+}
+
+.address-item {
+    background-color: #2a3144;
+    border-radius: 8px;
+    padding: 15px;
+    margin-bottom: 10px;
+    display: flex;
+    justify-content: space-between;
+    border-left: 3px solid #f0b90b;
+    cursor: pointer;
+    transition: background-color 0.2s;
+}
+
+.address-item:hover {
+    background-color: #343c52;
+}
+
+.address-details {
+    flex: 1;
+}
+
+.address-label {
+    font-weight: 600;
+    color: #ffffff;
+    font-size: 16px;
+    margin-bottom: 4px;
+    display: flex;
+    align-items: center;
+}
+
+.address-crypto-badge {
+    display: inline-block;
+    background-color: rgba(240, 185, 11, 0.2);
+    color: #f0b90b;
+    font-size: 12px;
+    padding: 2px 6px;
+    border-radius: 4px;
+    margin-left: 8px;
+}
+
+.address-value {
+    font-family: monospace;
+    color: #b0b0b0;
+    font-size: 14px;
+    margin-bottom: 4px;
+}
+
+.address-notes {
+    font-size: 13px;
+    color: #8a8d98;
+    font-style: italic;
+}
+
+.address-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.edit-address,
+.delete-address {
+    background: none;
+    border: 1px solid #3d4559;
+    color: #b0b0b0;
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 12px;
+    cursor: pointer;
+}
+
+.edit-address:hover {
+    border-color: #f0b90b;
+    color: #f0b90b;
+}
+
+.delete-address:hover {
+    border-color: #f44336;
+    color: #f44336;
+}
+
+.no-addresses {
+    padding: 20px;
+    text-align: center;
+    color: #b0b0b0;
+    background-color: #2a3144;
+    border-radius: 8px;
+}
+
+/* Add Address Modal */
+.add-address-modal {
+    background-color: #1a1f2a;
+    border-radius: 12px;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+    border: 1px solid #2e3444;
+    padding: 24px;
+    width: 500px;
+    max-width: 90%;
+}
+
+.add-address-modal .form-textarea {
+    width: 100%;
+    padding: 12px;
+    background-color: #2e3444;
+    color: #ffffff;
+    border: 1px solid #3d4559;
+    border-radius: 6px;
+    font-size: 16px;
+    min-height: 80px;
+    resize: vertical;
+    font-family: inherit;
+}
+
+.modal-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+    margin-top: 20px;
+}
+
+.save-btn {
+    background-color: #f0b90b;
+    color: #1a1f2a;
+    border: none;
+    border-radius: 6px;
+    padding: 10px 20px;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.form-group {
+    margin-bottom: 16px;
+}
+
+.form-group label {
+    display: block;
+    margin-bottom: 8px;
+    color: #b0b0b0;
+}
+
+/* Add to your Withdrawal.css file */
+.address-sort-options {
+    display: flex;
+    align-items: center;
+    margin-bottom: 12px;
+    color: #b0b0b0;
+}
+
+.address-sort-options label {
+    margin-right: 8px;
+    font-size: 14px;
+}
+
+.sort-select {
+    background-color: #2e3444;
+    color: #ffffff;
+    border: 1px solid #3d4559;
+    border-radius: 4px;
+    padding: 4px 8px;
+    font-size: 14px;
+}
+
+.address-book-nav-button {
+    display: flex;
+    align-items: center;
+    margin-top: 16px;
+    background-color: #2e3444;
+    border: none;
+    color: #ffffff;
+    padding: 10px 16px;
+    border-radius: 4px;
+    cursor: pointer;
+    width: 100%;
+    text-align: left;
+}
+
+.address-book-nav-button:hover {
+    background-color: #3d4559;
+}
+
+.address-book-nav-button .nav-icon {
+    margin-right: 10px;
+    font-size: 16px;
+}
+
+.input-error {
+    border-color: #f44336 !important;
+}
+
+.input-error-message {
+    color: #f44336;
+    font-size: 13px;
+    margin-top: 6px;
+    margin-left: 2px;
+}
+
+.input-warning {
+    border-color: #ff9800 !important;
+}
+
+.input-warning-message {
+    color: #ff9800;
+    font-size: 13px;
+    margin-top: 6px;
+    margin-left: 2px;
 }
