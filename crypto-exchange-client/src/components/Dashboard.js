@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import './Dashboard.css';
 import SearchBox from './SearchBox/SearchBox';
+import PortfolioChart from './PortfolioChart';
 
 function Dashboard() {
     const navigate = useNavigate();
@@ -10,6 +11,7 @@ function Dashboard() {
     const [isLoading, setIsLoading] = useState(true);
     const [apiError, setApiError] = useState('');
     const [isAdmin, setIsAdmin] = useState(false);
+    const [portfolioRefresh] = useState(0); // Remove setPortfolioRefresh since it's never used
 
     // Enhanced function to get proper display name from user data
     const getDisplayName = (user) => {
@@ -48,6 +50,8 @@ function Dashboard() {
     const navigateToAdminPanel = () => {
         navigate('/admin');
     };
+
+
 
     useEffect(() => {
         const fetchUserData = async () => {
@@ -483,6 +487,14 @@ function Dashboard() {
                             </div>
                         </div>
                     </div>
+
+                    {/* Add the portfolio chart here */}
+                    {isVerified && (
+                        <PortfolioChart
+                            token={localStorage.getItem('auth_token')}
+                            refresh={portfolioRefresh}
+                        />
+                    )}
 
                     {apiError && (
                         <div className="error-alert">

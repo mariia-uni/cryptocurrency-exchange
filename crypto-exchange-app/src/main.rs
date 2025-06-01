@@ -26,6 +26,7 @@ pub mod deposits;
 pub mod email;
 pub mod markets;
 pub mod models;
+pub mod portfolio; // Add the portfolio module
 pub mod pricing;
 pub mod schema;
 pub mod transactions;
@@ -1451,6 +1452,7 @@ async fn main() -> std::io::Result<()> {
             .service(wallet_scope)
             .configure(deposits::configure_routes)
             .configure(withdrawals::configure_routes)
+            .service(portfolio::get_portfolio_distribution) // Add portfolio distribution endpoint
     })
     .bind(format!("{}:{}", host, port))?
     .run()
