@@ -1100,10 +1100,6 @@ function Withdrawal() {
                             <span className="nav-icon">📈</span>
                             <span className="nav-text">Futures</span>
                         </li>
-                        <li className="nav-item" onClick={() => navigate('/futures')}>
-                            <span className="nav-icon">📈</span>
-                            <span className="nav-text">Futures</span>
-                        </li>
                         <li className="nav-item" onClick={() => navigate('/assets-overview')}>
                             <span className="nav-icon">💎</span>
                             <span className="nav-text">Assets</span>
