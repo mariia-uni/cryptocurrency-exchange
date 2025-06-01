@@ -1096,6 +1096,14 @@ function Withdrawal() {
                             <span className="nav-icon">💱</span>
                             <span className="nav-text">Markets</span>
                         </li>
+                        <li className="nav-item" onClick={() => navigate('/futures')}>
+                            <span className="nav-icon">📈</span>
+                            <span className="nav-text">Futures</span>
+                        </li>
+                        <li className="nav-item" onClick={() => navigate('/futures')}>
+                            <span className="nav-icon">📈</span>
+                            <span className="nav-text">Futures</span>
+                        </li>
                         <li className="nav-item" onClick={() => navigate('/assets-overview')}>
                             <span className="nav-icon">💎</span>
                             <span className="nav-text">Assets</span>
@@ -1111,6 +1119,10 @@ function Withdrawal() {
                         <li className="nav-item" onClick={() => navigate('/settings')}>
                             <span className="nav-icon">👤</span>
                             <span className="nav-text">Account Settings</span>
+                        </li>
+                        <li className="nav-item">
+                            <span className="nav-icon">⚙️</span>
+                            <span className="nav-text">System Settings</span>
                         </li>
                     </ul>
                 </nav>

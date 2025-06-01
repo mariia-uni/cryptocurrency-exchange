@@ -313,6 +313,10 @@ function AssetsOverview() {
                             <span className="nav-icon">💱</span>
                             <span className="nav-text">Markets</span>
                         </li>
+                        <li className="nav-item" onClick={() => navigate('/futures')}>
+                            <span className="nav-icon">📈</span>
+                            <span className="nav-text">Futures</span>
+                        </li>
                         <li className="nav-item active">
                             <span className="nav-icon">💎</span>
                             <span className="nav-text">Assets</span>

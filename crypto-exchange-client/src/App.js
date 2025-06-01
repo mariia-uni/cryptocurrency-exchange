@@ -19,6 +19,7 @@ import Assets from './components/Assets';
 import AssetsOverview from './components/AssetsOverview';
 import Deposit from './components/Deposit';
 import Withdrawal from './components/Withdrawal';
+import Futures from './components/Futures';
 import './App.css';
 
 const ProtectedRoute = ({ children }) => {
@@ -59,6 +60,7 @@ function App() {
         <Route path="/document-upload" element={<ProtectedRoute><DocumentUpload /></ProtectedRoute>} />
         <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
         <Route path="/markets" element={<Markets />} />
+        <Route path="/futures" element={<ProtectedRoute><Futures /></ProtectedRoute>} />
         <Route path="/assets" element={<ProtectedRoute><Assets /></ProtectedRoute>} />
         <Route path="/assets-overview" element={<AssetsOverview />} />
         <Route path="/settings" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
