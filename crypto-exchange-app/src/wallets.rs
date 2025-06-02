@@ -742,11 +742,36 @@ pub async fn update_balance(
                         _ => return Err(diesel::result::Error::RollbackTransaction),
                     };
 
+                    // Get current price and calculate USD value
+                    let crypto_clone = cryptocurrency_inner.clone();
+                    let (price, usd_value) = if new_balance > BigDecimal::from(0) {
+                        // Only fetch price for non-zero balances
+                        let price_future = pricing::get_current_price(&crypto_clone);
+                        match tokio::runtime::Handle::current().block_on(price_future) {
+                            Ok(p) => {
+                                let price_decimal = BigDecimal::from_str(&p.to_string())
+                                    .unwrap_or_else(|_| BigDecimal::from_str("0").unwrap());
+                                let usd_val = if price_decimal > BigDecimal::from(0) {
+                                    Some(&new_balance * &price_decimal)
+                                } else {
+                                    None
+                                };
+                                (Some(price_decimal), usd_val)
+                            }
+                            Err(_) => (balance.last_price.clone(), None),
+                        }
+                    } else {
+                        // For zero balance, set USD value to zero
+                        (balance.last_price.clone(), Some(BigDecimal::from(0)))
+                    };
+
                     // Update the balance
                     diesel::update(wallet_balances::table)
                         .filter(wallet_balances::id.eq(balance.id))
                         .set((
-                            wallet_balances::balance.eq(new_balance),
+                            wallet_balances::balance.eq(&new_balance),
+                            wallet_balances::usd_value.eq(&usd_value),
+                            wallet_balances::last_price.eq(&price),
                             wallet_balances::last_updated.eq(diesel::dsl::now),
                         ))
                         .get_result::<WalletBalance>(conn)

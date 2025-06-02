@@ -205,9 +205,35 @@ pub async fn submit_withdrawal(
             // Subtract amount and fee from balance
             let new_balance = &balance.balance - &amount_clone - &fee_clone;
 
-            // Update the balance
+            // Calculate new USD value based on current price
+            let new_usd_value = if new_balance > BigDecimal::from(0) {
+                // Get current price for the cryptocurrency
+                let price_future = crate::pricing::get_current_price(&crypto_clone);
+                match tokio::runtime::Handle::current().block_on(price_future) {
+                    Ok(current_price) => {
+                        let price_decimal = BigDecimal::from_str(&current_price.to_string())
+                            .unwrap_or_else(|_| BigDecimal::from(0));
+
+                        if price_decimal > BigDecimal::from(0) {
+                            Some(&new_balance * &price_decimal)
+                        } else {
+                            None
+                        }
+                    }
+                    Err(_) => None,
+                }
+            } else {
+                // If balance is 0, USD value should also be 0
+                Some(BigDecimal::from(0))
+            };
+
+            // Update both balance and USD value
             diesel::update(wallet_balances::table.find(balance.id))
-                .set(wallet_balances::balance.eq(&new_balance))
+                .set((
+                    wallet_balances::balance.eq(&new_balance),
+                    wallet_balances::usd_value.eq(&new_usd_value),
+                    wallet_balances::last_updated.eq(diesel::dsl::now),
+                ))
                 .execute(conn)?;
 
             Ok(())
