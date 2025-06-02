@@ -658,3 +658,9 @@ impl From<FuturesPosition> for PositionResponse {
         }
     }
 }
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct FundFuturesRequest {
+    pub wallet_id: i32,
+    pub amount: String,
+}

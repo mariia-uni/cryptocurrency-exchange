@@ -630,6 +630,146 @@
     margin: 0;
 }
 
+/* Enhanced Positions Header */
+.positions-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 20px 24px;
+    border-bottom: 1px solid #2e3444;
+    background: linear-gradient(135deg, #1a1f2a 0%, #1e2530 100%);
+}
+
+.positions-header h3 {
+    color: #f5f5f5;
+    font-size: 18px;
+    font-weight: 600;
+    margin: 0;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.positions-header h3::before {
+    content: '📈';
+    font-size: 16px;
+}
+
+.positions-header-actions {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+}
+
+/* Enhanced Refresh Positions Button */
+.refresh-positions-btn {
+    background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+    color: white;
+    border: none;
+    border-radius: 8px;
+    padding: 10px 16px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    box-shadow: 0 2px 8px rgba(59, 130, 246, 0.3);
+    min-width: 140px;
+    justify-content: center;
+}
+
+.refresh-positions-btn:hover:not(:disabled) {
+    background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(59, 130, 246, 0.4);
+}
+
+.refresh-positions-btn:active:not(:disabled) {
+    transform: translateY(0);
+    box-shadow: 0 2px 4px rgba(59, 130, 246, 0.3);
+}
+
+.refresh-positions-btn:disabled {
+    background: linear-gradient(135deg, #6b7280 0%, #4b5563 100%);
+    cursor: not-allowed;
+    transform: none;
+    box-shadow: none;
+}
+
+.refresh-icon {
+    font-size: 14px;
+    transition: transform 0.3s ease;
+}
+
+.refresh-positions-btn:hover .refresh-icon {
+    transform: rotate(180deg);
+}
+
+.refresh-spinner {
+    font-size: 14px;
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    from {
+        transform: rotate(0deg);
+    }
+
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+/* Refresh Button */
+.refresh-btn {
+    padding: 8px 16px;
+    background: #3b82f6;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 14px;
+    transition: background 0.2s ease;
+}
+
+.refresh-btn:hover:not(:disabled) {
+    background: #2563eb;
+}
+
+.refresh-btn:disabled {
+    background: #6b7280;
+    cursor: not-allowed;
+}
+
+.pnl-summary {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 16px 24px;
+    background: #1e2530;
+    border-top: 1px solid #2e3444;
+}
+
+.summary-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 14px;
+    font-weight: 500;
+}
+
+.no-pnl {
+    padding: 40px 24px;
+    text-align: center;
+    color: #8e8e8e;
+}
+
+.no-pnl p {
+    margin: 8px 0;
+}
+
 /* Enhanced Positions Table */
 .positions-table,
 .pnl-table {
@@ -1035,77 +1175,1040 @@
     font-weight: 600;
 }
 
-/* Responsive Design */
-@media (max-width: 1200px) {
-    .trading-layout {
-        flex-direction: column;
-        min-height: auto;
-    }
-
-    .trading-panel-right {
-        width: 100%;
-        position: static;
-        max-height: none;
-    }
-
-    .chart-container.expanded-large {
-        min-height: 700px;
-        /* Slightly smaller on medium screens */
-    }
-
-    .market-data-section {
-        min-height: 700px;
-    }
+/* Update the P&L table grid layout */
+.pnl-table .table-header {
+    display: grid;
+    grid-template-columns: 1fr 0.8fr 0.7fr 0.8fr 1fr 1fr 1.2fr 0.8fr;
+    padding: 16px 24px;
+    background: #262d3a;
+    border-bottom: 1px solid #2e3444;
+    font-size: 14px;
+    font-weight: 600;
+    color: #8e8e8e;
 }
 
+.pnl-table .table-row {
+    display: grid;
+    grid-template-columns: 1fr 0.8fr 0.7fr 0.8fr 1fr 1fr 1.2fr 0.8fr;
+    padding: 16px 24px;
+    border-bottom: 1px solid #2e3444;
+    font-size: 14px;
+    color: #f5f5f5;
+    transition: background 0.2s ease;
+}
+
+.pnl-table .table-row:hover {
+    background: #262d3a;
+}
+
+/* Enhanced Futures Balance Panel - Replace existing styles */
+.futures-balance-panel {
+    background: linear-gradient(135deg, #1e2530 0%, #252b3a 100%);
+    border: 1px solid #3e4651;
+    border-radius: 12px;
+    padding: 24px;
+    margin-top: 24px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    position: relative;
+    overflow: hidden;
+}
+
+.futures-balance-panel::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 3px;
+    background: linear-gradient(90deg, #f0b90b 0%, #f7931e 100%);
+}
+
+.futures-balance-panel h4 {
+    color: #f0b90b;
+    font-size: 20px;
+    font-weight: 700;
+    margin: 0 0 20px 0;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.futures-balance-panel h4::before {
+    content: '📊';
+    font-size: 18px;
+}
+
+.balance-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px 16px;
+    margin-bottom: 8px;
+    background: rgba(46, 52, 68, 0.3);
+    border-radius: 8px;
+    border-left: 3px solid transparent;
+    transition: all 0.2s ease;
+}
+
+.balance-item:hover {
+    background: rgba(46, 52, 68, 0.5);
+    border-left-color: #f0b90b;
+    transform: translateX(2px);
+}
+
+.balance-item:last-of-type {
+    margin-bottom: 20px;
+}
+
+.balance-item span:first-child {
+    color: #b0b6c3;
+    font-size: 14px;
+    font-weight: 500;
+    letter-spacing: 0.5px;
+}
+
+.balance-item span:last-child {
+    color: #ffffff;
+    font-size: 16px;
+    font-weight: 700;
+    font-family: 'Roboto Mono', monospace;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+}
+
+/* Special styling for different balance types */
+.balance-item:nth-child(2) span:last-child {
+    color: #26a69a;
+    /* Trading Balance - teal */
+}
+
+.balance-item:nth-child(3) span:last-child {
+    color: #02c076;
+    /* Available - green */
+}
+
+.balance-item:nth-child(4) span:last-child {
+    color: #ff9800;
+    /* In Positions - orange */
+}
+
+.fund-futures-btn {
+    width: 100%;
+    background: linear-gradient(135deg, #02c076 0%, #26a69a 100%);
+    color: #ffffff;
+    border: none;
+    border-radius: 12px;
+    padding: 16px 24px;
+    font-size: 16px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    box-shadow: 0 4px 12px rgba(2, 192, 118, 0.3);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    position: relative;
+    overflow: hidden;
+}
+
+.fund-futures-btn::before {
+    content: '💰';
+    font-size: 20px;
+    filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.3));
+}
+
+.fund-futures-btn::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+    transition: left 0.6s ease;
+}
+
+.fund-futures-btn:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 8px 20px rgba(2, 192, 118, 0.4);
+    background: linear-gradient(135deg, #26a69a 0%, #02c076 100%);
+}
+
+.fund-futures-btn:hover::after {
+    left: 100%;
+}
+
+.fund-futures-btn:active {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 8px rgba(2, 192, 118, 0.3);
+}
+
+/* Error states */
+.fund-error-message {
+    background: rgba(255, 87, 87, 0.1);
+    border: 1px solid rgba(255, 87, 87, 0.3);
+    color: #ff5757;
+    padding: 12px 16px;
+    border-radius: 8px;
+    margin-top: 16px;
+    font-size: 14px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.fund-error-message::before {
+    content: '⚠️';
+    font-size: 16px;
+}
+
+/* Success states */
+.fund-success-message {
+    background: rgba(2, 192, 118, 0.1);
+    border: 1px solid rgba(2, 192, 118, 0.3);
+    color: #02c076;
+    padding: 12px 16px;
+    border-radius: 8px;
+    margin-top: 16px;
+    font-size: 14px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.fund-success-message::before {
+    content: '✅';
+    font-size: 16px;
+}
+
+/* Mobile responsiveness */
 @media (max-width: 768px) {
-    .trading-layout {
-        gap: 16px;
+    .fund-futures-dialog {
+        width: 95%;
+        max-width: none;
+        margin: 20px;
     }
 
-    .trading-panel-right {
-        padding: 16px;
+    .fund-futures-header {
+        padding: 20px 24px;
     }
 
-    .chart-container.expanded-large {
-        min-height: 600px;
-        /* Smaller on mobile */
+    .fund-futures-content {
+        padding: 24px 20px;
     }
 
-    .market-data-section {
-        min-height: 600px;
+    .fund-futures-actions {
+        flex-direction: column;
     }
 
-    .trading-tabs {
-        padding-top: 10px;
+    .enhanced-amount-input {
+        font-size: 16px;
+        padding: 14px 16px;
     }
 
-    .create-market-contract-panel {
-        margin-top: 16px;
-        padding: 16px;
-    }
-}
-
-@media (max-width: 480px) {
-    .chart-container.expanded-large {
-        min-height: 500px;
-    }
-
-    .market-data-section {
-        min-height: 500px;
-    }
-
-    .futures-container {
-        padding: 0 16px 16px 16px;
-    }
-
-    .create-market-contract-panel h4 {
-        font-size: 14px;
-    }
-
-    .create-market-contract-panel p {
-        font-size: 12px;
+    .enhanced-currency-label {
+        padding: 14px 16px;
     }
 }
 
-/* ...rest of existing CSS... */
+/* Loading state for confirm button */
+.fund-confirm-btn.loading {
+    position: relative;
+    color: transparent;
+}
+
+.fund-confirm-btn.loading::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 20px;
+    height: 20px;
+    border: 2px solid rgba(255, 255, 255, 0.3);
+    border-top: 2px solid #ffffff;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    0% {
+        transform: translate(-50%, -50%) rotate(0deg);
+    }
+
+    100% {
+        transform: translate(-50%, -50%) rotate(360deg);
+    }
+}
+
+/* Enhanced Fund Futures Account Modal */
+.fund-futures-modal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.85);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+    backdrop-filter: blur(8px);
+    animation: fadeIn 0.3s ease-out;
+}
+
+.fund-futures-dialog {
+    background: linear-gradient(135deg, #1e2530 0%, #262d3a 100%);
+    border: 1px solid #3e4651;
+    border-radius: 16px;
+    width: 90%;
+    max-width: 480px;
+    box-shadow: 0 24px 48px rgba(0, 0, 0, 0.4);
+    overflow: hidden;
+    position: relative;
+    animation: slideIn 0.3s ease-out;
+}
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+    }
+
+    to {
+        opacity: 1;
+    }
+}
+
+@keyframes slideIn {
+    from {
+        opacity: 0;
+        transform: translateY(-20px) scale(0.95);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+    }
+}
+
+.fund-futures-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 24px 28px;
+    border-bottom: 1px solid #3e4651;
+    background: linear-gradient(135deg, #1a1f2a 0%, #1e2530 100%);
+    position: relative;
+}
+
+.fund-futures-header::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 3px;
+    background: linear-gradient(90deg, #f0b90b 0%, #02c076 100%);
+}
+
+.fund-futures-header h3 {
+    color: #f5f5f5;
+    font-size: 20px;
+    font-weight: 700;
+    margin: 0;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.fund-futures-header h3::before {
+    content: '💰';
+    font-size: 24px;
+}
+
+.fund-futures-close {
+    background: transparent;
+    border: none;
+    color: #8e8e8e;
+    font-size: 28px;
+    cursor: pointer;
+    padding: 4px;
+    width: 36px;
+    height: 36px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 8px;
+    transition: all 0.2s ease;
+}
+
+.fund-futures-close:hover {
+    background: #3e4651;
+    color: #fff;
+    transform: scale(1.1);
+}
+
+.fund-futures-content {
+    padding: 28px;
+}
+
+.fund-info-section {
+    margin-bottom: 24px;
+    padding: 20px;
+    background: rgba(2, 192, 118, 0.08);
+    border: 1px solid rgba(2, 192, 118, 0.2);
+    border-radius: 12px;
+    position: relative;
+}
+
+.fund-info-section::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 2px;
+    background: linear-gradient(90deg, #02c076 0%, #26a69a 100%);
+    border-radius: 12px 12px 0 0;
+}
+
+.fund-info-title {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-weight: 700;
+    color: #02c076;
+    margin-bottom: 8px;
+    font-size: 16px;
+}
+
+.fund-info-title::before {
+    content: '🔋';
+    font-size: 18px;
+}
+
+.fund-info-description {
+    color: #b0b6c3;
+    margin: 0;
+    font-size: 14px;
+    line-height: 1.5;
+}
+
+.amount-input-section {
+    margin-bottom: 24px;
+}
+
+.amount-input-section label {
+    display: block;
+    color: #f5f5f5;
+    font-weight: 600;
+    margin-bottom: 12px;
+    font-size: 16px;
+}
+
+.enhanced-amount-input-group {
+    position: relative;
+    display: flex;
+    align-items: center;
+    background: #262d3a;
+    border: 2px solid #3e4651;
+    border-radius: 12px;
+    transition: all 0.3s ease;
+    overflow: hidden;
+}
+
+.enhanced-amount-input-group:focus-within {
+    border-color: #02c076;
+    box-shadow: 0 0 0 4px rgba(2, 192, 118, 0.1);
+    background: #2a3144;
+}
+
+.enhanced-amount-input {
+    flex: 1;
+    background: transparent;
+    border: none;
+    color: #f5f5f5;
+    padding: 16px 20px;
+    font-size: 18px;
+    font-weight: 600;
+    font-family: 'Roboto Mono', monospace;
+}
+
+.enhanced-amount-input:focus {
+    outline: none;
+}
+
+.enhanced-amount-input::placeholder {
+    color: #8e8e8e;
+    font-weight: 400;
+}
+
+.enhanced-currency-label {
+    background: #02c076;
+    color: #ffffff;
+    padding: 16px 20px;
+    font-size: 16px;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+}
+
+.balance-display {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: 12px;
+    padding: 12px 16px;
+    background: rgba(46, 52, 68, 0.4);
+    border-radius: 8px;
+    border-left: 3px solid #f0b90b;
+}
+
+.balance-display span:first-child {
+    color: #b0b6c3;
+    font-size: 14px;
+}
+
+.balance-display span:last-child {
+    color: #f0b90b;
+    font-weight: 700;
+    font-family: 'Roboto Mono', monospace;
+    font-size: 16px;
+}
+
+.fund-futures-actions {
+    display: flex;
+    gap: 16px;
+    margin-top: 32px;
+}
+
+.fund-cancel-btn,
+.fund-confirm-btn {
+    flex: 1;
+    padding: 16px 24px;
+    border: none;
+    border-radius: 12px;
+    font-size: 16px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    position: relative;
+    overflow: hidden;
+}
+
+.fund-cancel-btn {
+    background: #3e4651;
+    color: #f5f5f5;
+    border: 2px solid #4a5568;
+}
+
+.fund-cancel-btn:hover {
+    background: #4a5568;
+    transform: translateY(-2px);
+    box-shadow: 0 8px 16px rgba(74, 85, 104, 0.3);
+}
+
+.fund-confirm-btn {
+    background: linear-gradient(135deg, #02c076 0%, #26a69a 100%);
+    color: #ffffff;
+    box-shadow: 0 4px 12px rgba(2, 192, 118, 0.3);
+}
+
+.fund-confirm-btn:hover:not(:disabled) {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 20px rgba(2, 192, 118, 0.4);
+    background: linear-gradient(135deg, #26a69a 0%, #02c076 100%);
+}
+
+.fund-confirm-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    transform: none;
+    box-shadow: none;
+}
+
+.fund-confirm-btn::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+    transition: left 0.5s ease;
+}
+
+.fund-confirm-btn:hover::before {
+    left: 100%;
+}
+
+/* Enhanced Success Notification Styles */
+.success-notification-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.7);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1100;
+    backdrop-filter: blur(6px);
+    animation: fadeInOverlay 0.3s ease-out;
+}
+
+.success-notification-modal {
+    background: linear-gradient(135deg, #1e2530 0%, #262d3a 100%);
+    border: 1px solid #02c076;
+    border-radius: 20px;
+    width: 90%;
+    max-width: 500px;
+    box-shadow: 0 20px 60px rgba(2, 192, 118, 0.3);
+    overflow: hidden;
+    position: relative;
+    animation: slideInSuccess 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+@keyframes fadeInOverlay {
+    from {
+        opacity: 0;
+    }
+
+    to {
+        opacity: 1;
+    }
+}
+
+@keyframes slideInSuccess {
+    from {
+        opacity: 0;
+        transform: translateY(-30px) scale(0.9);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+    }
+}
+
+.success-notification-header {
+    background: linear-gradient(135deg, #02c076 0%, #26a69a 100%);
+    padding: 24px 32px;
+    text-align: center;
+    position: relative;
+    overflow: hidden;
+}
+
+.success-notification-header::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.3), transparent);
+    animation: shimmer 2s ease-out;
+}
+
+@keyframes shimmer {
+    from {
+        left: -100%;
+    }
+
+    to {
+        left: 100%;
+    }
+}
+
+.success-icon-container {
+    width: 80px;
+    height: 80px;
+    margin: 0 auto 16px;
+    background: rgba(255, 255, 255, 0.2);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+    animation: pulseSuccess 2s ease-in-out infinite;
+}
+
+@keyframes pulseSuccess {
+
+    0%,
+    100% {
+        transform: scale(1);
+    }
+
+    50% {
+        transform: scale(1.05);
+    }
+}
+
+.success-icon {
+    font-size: 48px;
+    color: #ffffff;
+    animation: checkmarkPop 0.6s cubic-bezier(0.68, -0.55, 0.265, 1.55) 0.2s both;
+}
+
+@keyframes checkmarkPop {
+    from {
+        transform: scale(0) rotate(-45deg);
+        opacity: 0;
+    }
+
+    to {
+        transform: scale(1) rotate(0deg);
+        opacity: 1;
+    }
+}
+
+.success-title {
+    color: #ffffff;
+    font-size: 24px;
+    font-weight: 800;
+    margin: 0;
+    text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+    letter-spacing: 0.5px;
+}
+
+.success-notification-content {
+    padding: 32px;
+    text-align: center;
+}
+
+.success-message {
+    color: #b0b6c3;
+    font-size: 18px;
+    line-height: 1.6;
+    margin-bottom: 24px;
+    font-weight: 500;
+}
+
+.success-details {
+    background: rgba(2, 192, 118, 0.08);
+    border: 1px solid rgba(2, 192, 118, 0.2);
+    border-radius: 12px;
+    padding: 20px;
+    margin-bottom: 28px;
+    position: relative;
+}
+
+.success-details::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 2px;
+    background: linear-gradient(90deg, #02c076 0%, #26a69a 100%);
+    border-radius: 12px 12px 0 0;
+}
+
+.success-amount {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    margin-bottom: 16px;
+}
+
+.success-amount-value {
+    font-size: 32px;
+    font-weight: 800;
+    color: #02c076;
+    font-family: 'Roboto Mono', monospace;
+    text-shadow: 0 2px 4px rgba(2, 192, 118, 0.3);
+}
+
+.success-currency {
+    background: #02c076;
+    color: #ffffff;
+    padding: 8px 16px;
+    border-radius: 20px;
+    font-size: 16px;
+    font-weight: 700;
+    letter-spacing: 1px;
+}
+
+.success-description {
+    color: #8e9bb0;
+    font-size: 14px;
+    margin: 0;
+    font-style: italic;
+}
+
+.success-stats {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    margin-bottom: 28px;
+}
+
+.success-stat {
+    background: rgba(46, 52, 68, 0.4);
+    border-radius: 8px;
+    padding: 16px;
+    text-align: center;
+    border-left: 3px solid #f0b90b;
+}
+
+.success-stat-label {
+    color: #8e9bb0;
+    font-size: 12px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    margin-bottom: 6px;
+}
+
+.success-stat-value {
+    color: #ffffff;
+    font-size: 18px;
+    font-weight: 700;
+    font-family: 'Roboto Mono', monospace;
+}
+
+.success-actions {
+    display: flex;
+    gap: 16px;
+}
+
+.success-close-btn {
+    flex: 1;
+    background: linear-gradient(135deg, #02c076 0%, #26a69a 100%);
+    color: #ffffff;
+    border: none;
+    border-radius: 12px;
+    padding: 16px 24px;
+    font-size: 16px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    position: relative;
+    overflow: hidden;
+    box-shadow: 0 4px 12px rgba(2, 192, 118, 0.3);
+}
+
+.success-close-btn::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+    transition: left 0.6s ease;
+}
+
+.success-close-btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 20px rgba(2, 192, 118, 0.4);
+    background: linear-gradient(135deg, #26a69a 0%, #02c076 100%);
+}
+
+.success-close-btn:hover::before {
+    left: 100%;
+}
+
+.success-close-btn:active {
+    transform: translateY(0);
+    box-shadow: 0 4px 8px rgba(2, 192, 118, 0.3);
+}
+
+.success-view-balance-btn {
+    flex: 1;
+    background: transparent;
+    color: #02c076;
+    border: 2px solid #02c076;
+    border-radius: 12px;
+    padding: 14px 24px;
+    font-size: 16px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.3s ease;
+}
+
+.success-view-balance-btn:hover {
+    background: rgba(2, 192, 118, 0.1);
+    transform: translateY(-2px);
+    box-shadow: 0 8px 16px rgba(2, 192, 118, 0.2);
+}
+
+/* Progress Bar for Auto-close */
+.success-progress-bar {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    height: 3px;
+    background: linear-gradient(90deg, #f0b90b 0%, #02c076 100%);
+    border-radius: 0 0 20px 20px;
+    animation: progressBar 5s linear;
+}
+
+@keyframes progressBar {
+    from {
+        width: 100%;
+    }
+
+    to {
+        width: 0%;
+    }
+}
+
+/* Enhanced Toast Notification Alternative */
+.success-toast {
+    position: fixed;
+    top: 24px;
+    right: 24px;
+    background: linear-gradient(135deg, #02c076 0%, #26a69a 100%);
+    color: #ffffff;
+    padding: 20px 24px;
+    border-radius: 12px;
+    box-shadow: 0 8px 24px rgba(2, 192, 118, 0.4);
+    z-index: 1100;
+    max-width: 400px;
+    animation: slideInToast 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+@keyframes slideInToast {
+    from {
+        opacity: 0;
+        transform: translateX(100%) translateY(-20px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateX(0) translateY(0);
+    }
+}
+
+.success-toast-content {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+}
+
+.success-toast-icon {
+    font-size: 24px;
+    filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.3));
+}
+
+.success-toast-text {
+    flex: 1;
+}
+
+.success-toast-title {
+    font-size: 16px;
+    font-weight: 700;
+    margin: 0 0 4px 0;
+}
+
+.success-toast-message {
+    font-size: 14px;
+    opacity: 0.9;
+    margin: 0;
+}
+
+.success-toast-close {
+    background: none;
+    border: none;
+    color: #ffffff;
+    font-size: 20px;
+    cursor: pointer;
+    padding: 4px;
+    border-radius: 4px;
+    transition: background 0.2s ease;
+}
+
+.success-toast-close:hover {
+    background: rgba(255, 255, 255, 0.2);
+}
+
+/* Mobile Responsiveness */
+@media (max-width: 768px) {
+    .success-notification-modal {
+        width: 95%;
+        margin: 20px;
+    }
+
+    .success-notification-header {
+        padding: 20px 24px;
+    }
+
+    .success-notification-content {
+        padding: 24px 20px;
+    }
+
+    .success-icon-container {
+        width: 70px;
+        height: 70px;
+        margin-bottom: 12px;
+    }
+
+    .success-icon {
+        font-size: 40px;
+    }
+
+    .success-title {
+        font-size: 20px;
+    }
+
+    .success-message {
+        font-size: 16px;
+    }
+
+    .success-amount-value {
+        font-size: 28px;
+    }
+
+    .success-actions {
+        flex-direction: column;
+    }
+
+    .success-stats {
+        grid-template-columns: 1fr;
+    }
+
+    .success-toast {
+        top: 16px;
+        right: 16px;
+        left: 16px;
+        max-width: none;
+    }
+}
+
+/* Accessibility Enhancements */
+@media (prefers-reduced-motion: reduce) {
+
+    .success-notification-modal,
+    .success-toast,
+    .success-icon,
+    .success-icon-container,
+    .success-notification-header::before {
+        animation: none;
+    }
+
+    .success-close-btn,
+    .success-view-balance-btn {
+        transition: none;
+    }
+}
+
+/* High Contrast Mode */
+@media (prefers-contrast: high) {
+    .success-notification-modal {
+        border-width: 2px;
+        box-shadow: 0 0 0 2px #02c076;
+    }
+
+    .success-details {
+        border-width: 2px;
+    }
+
+    .success-close-btn,
+    .success-view-balance-btn {
+        border-width: 2px;
+    }
+}

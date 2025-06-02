@@ -9,9 +9,9 @@ use std::str::FromStr; // Add this import
 use crate::auth;
 use crate::db::DbPool;
 use crate::models::{
-    ClosePositionRequest, CreatePositionRequest, FundingRate, FuturesBalance,
+    ClosePositionRequest, CreatePositionRequest, FundFuturesRequest, FundingRate, FuturesBalance,
     FuturesBalanceResponse, FuturesPnlHistory, FuturesPosition, NewFundingRate, NewFuturesBalance,
-    NewFuturesPnlHistory, NewFuturesPosition, PositionResponse,
+    NewFuturesPnlHistory, NewFuturesPosition, PositionResponse, WalletBalance,
 };
 use crate::pricing;
 use crate::schema::{
@@ -526,8 +526,33 @@ pub async fn get_pnl_history(
         actix_web::error::ErrorInternalServerError("Failed to fetch P&L history")
     })?;
 
+    // Format the response with proper field mapping
+    let formatted_history: Vec<serde_json::Value> = pnl_history
+        .into_iter()
+        .map(|record| {
+            json!({
+                "id": record.id,
+                "symbol": record.symbol,
+                "side": record.side,
+                "size": record.size.to_string(),
+                "entry_price": record.entry_price.to_string(),
+                "exit_price": record.exit_price.to_string(),
+                "leverage": record.leverage,
+                "margin": record.margin.to_string(),
+                "realized_pnl": record.realized_pnl.to_string(),
+                "realizedPnl": record.realized_pnl.to_string(), // Add both formats for compatibility
+                "commission": record.commission.to_string(),
+                "funding_fee": record.funding_fee.to_string(),
+                "fees": record.commission.to_string(), // Map commission to fees for frontend compatibility
+                "date": record.created_at.to_rfc3339(),
+                "created_at": record.created_at.to_rfc3339()
+            })
+        })
+        .collect();
+
     Ok(HttpResponse::Ok().json(json!({
-        "pnl_history": pnl_history
+        "pnl_history": formatted_history,
+        "total_count": formatted_history.len()
     })))
 }
 
@@ -560,6 +585,118 @@ pub async fn get_futures_balance(
     };
 
     Ok(HttpResponse::Ok().json(balance_response))
+}
+
+// Add this function to handle funding the futures account
+
+#[post("/fund-account")]
+pub async fn fund_futures_account(
+    req: HttpRequest,
+    pool: web::Data<DbPool>,
+    fund_req: web::Json<FundFuturesRequest>,
+) -> Result<HttpResponse, actix_web::Error> {
+    let user_id = auth::extract_user_id(&req)?;
+
+    // Parse and validate amount
+    let amount = match BigDecimal::from_str(&fund_req.amount) {
+        Ok(a) => {
+            if a <= BigDecimal::from(0) {
+                return Ok(HttpResponse::BadRequest().json(serde_json::json!({
+                    "error": "Amount must be positive"
+                })));
+            }
+            a
+        }
+        Err(_) => {
+            return Ok(HttpResponse::BadRequest().json(serde_json::json!({
+                "error": "Invalid amount format"
+            })));
+        }
+    };
+
+    // Begin transaction to update both wallet_balances and futures_balances
+    let mut conn = pool
+        .get()
+        .map_err(|_| actix_web::error::ErrorInternalServerError("Database connection error"))?;
+
+    // Execute transaction
+    let result = web::block(move || -> Result<FuturesBalance, diesel::result::Error> {
+        conn.transaction(|conn| {
+            // 1. Subtract from wallet_balances
+            let wallet_balance = {
+                use crate::schema::wallet_balances::dsl::*;
+                wallet_balances
+                    .filter(wallet_id.eq(fund_req.wallet_id as i64)) // Cast to i64
+                    .filter(cryptocurrency.eq("USDT"))
+                    .first::<WalletBalance>(conn)?
+            };
+
+            if wallet_balance.balance < amount {
+                return Err(diesel::result::Error::RollbackTransaction);
+            }
+
+            diesel::update(wallet_balances::table)
+                .filter(wallet_balances::id.eq(wallet_balance.id))
+                .set((
+                    wallet_balances::balance.eq(&wallet_balance.balance - &amount),
+                    wallet_balances::last_updated.eq(diesel::dsl::now),
+                ))
+                .execute(conn)?;
+
+            // 2. Add to futures_balances
+            let futures_balance = futures_balances::table
+                .filter(futures_balances::user_id.eq(user_id))
+                .filter(futures_balances::currency.eq("USDT"))
+                .first::<FuturesBalance>(conn)
+                .optional()?;
+
+            match futures_balance {
+                Some(balance) => {
+                    // Update existing balance
+                    diesel::update(futures_balances::table)
+                        .filter(futures_balances::id.eq(balance.id))
+                        .set((
+                            futures_balances::available_balance
+                                .eq(&balance.available_balance + &amount),
+                            futures_balances::last_updated.eq(diesel::dsl::now),
+                        ))
+                        .get_result::<FuturesBalance>(conn)
+                }
+                None => {
+                    // Create new balance record
+                    let new_balance = NewFuturesBalance {
+                        user_id,
+                        currency: "USDT".to_string(),
+                        available_balance: amount,
+                        margin_balance: BigDecimal::from(0),
+                        unrealized_pnl: BigDecimal::from(0),
+                    };
+
+                    diesel::insert_into(futures_balances::table)
+                        .values(&new_balance)
+                        .get_result::<FuturesBalance>(conn)
+                }
+            }
+        })
+    })
+    .await
+    .map_err(|_| actix_web::error::ErrorInternalServerError("Error processing transfer"))?;
+
+    match result {
+        Ok(updated_balance) => {
+            Ok(HttpResponse::Ok().json(serde_json::json!({
+                "message": "Futures account funded successfully",
+                "available_balance": updated_balance.available_balance.to_string(),
+                "margin_balance": updated_balance.margin_balance.to_string(),
+                "total_balance": (&updated_balance.available_balance + &updated_balance.margin_balance).to_string()
+            })))
+        },
+        Err(_) => {
+            Ok(HttpResponse::BadRequest().json(serde_json::json!({
+                "error": "Insufficient balance for transfer"
+            })))
+        }
+    }
 }
 
 // Helper functions
@@ -764,6 +901,7 @@ pub fn configure_routes(cfg: &mut web::ServiceConfig) {
             .service(close_position)
             .service(get_positions)
             .service(get_pnl_history)
-            .service(get_futures_balance),
+            .service(get_futures_balance)
+            .service(fund_futures_account),
     );
 }

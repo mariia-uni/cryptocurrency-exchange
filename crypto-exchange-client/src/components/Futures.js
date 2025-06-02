@@ -21,6 +21,12 @@ function Futures() {
     const [showConfirmation, setShowConfirmation] = useState(false);
     const [transferError, setTransferError] = useState('');
 
+    // Fund modal states
+    const [showFundModal, setShowFundModal] = useState(false);
+    const [fundAmount, setFundAmount] = useState('');
+    const [fundError, setFundError] = useState('');
+    const [isFunding, setIsFunding] = useState(false);
+
     // Trading states
     const [btcPrice, setBtcPrice] = useState(0);
     const [priceLoading, setPriceLoading] = useState(true);
@@ -35,6 +41,13 @@ function Futures() {
     const [positions, setPositions] = useState([]);
     const [pnlHistory, setPnlHistory] = useState([]);
     const [activeTab, setActiveTab] = useState('trading'); // 'trading', 'positions', 'pnl'
+
+    // Futures-specific balances
+    const [futuresAvailableBalance, setFuturesAvailableBalance] = useState('0');
+    const [futuresMarginBalance, setFuturesMarginBalance] = useState('0');
+
+    // Refresh state for positions
+    const [isRefreshingPositions, setIsRefreshingPositions] = useState(false);
 
     // Enhanced function to get proper display name from user data
     const getDisplayName = (user) => {
@@ -202,27 +215,33 @@ function Futures() {
         }
     };
 
-    // Enhanced P&L calculation for different leverage levels
+    // Replace the updatePositionsPnl function:
+
     const updatePositionsPnl = useCallback(() => {
         setPositions(prev => prev.map(position => {
-            const priceDiff = btcPrice - position.entryPrice;
+            const entryPrice = parseFloat(position.entryPrice || 0);
+            const size = parseFloat(position.size || 0);
+            const liquidationPrice = parseFloat(position.liquidationPrice || 0);
+            const margin = parseFloat(position.margin || 0);
+
+            const priceDiff = btcPrice - entryPrice;
 
             // Calculate unrealized P&L based on leverage
             let unrealizedPnl;
             if (position.side === 'long') {
-                unrealizedPnl = priceDiff * position.size;
+                unrealizedPnl = priceDiff * size;
             } else {
-                unrealizedPnl = -priceDiff * position.size;
+                unrealizedPnl = -priceDiff * size;
             }
 
             // Check for liquidation
             let isLiquidated = false;
-            if (position.side === 'long' && btcPrice <= position.liquidationPrice) {
+            if (position.side === 'long' && btcPrice <= liquidationPrice) {
                 isLiquidated = true;
-                unrealizedPnl = -position.margin; // Total loss of margin
-            } else if (position.side === 'short' && btcPrice >= position.liquidationPrice) {
+                unrealizedPnl = -margin; // Total loss of margin
+            } else if (position.side === 'short' && btcPrice >= liquidationPrice) {
                 isLiquidated = true;
-                unrealizedPnl = -position.margin; // Total loss of margin
+                unrealizedPnl = -margin; // Total loss of margin
             }
 
             return {
@@ -278,7 +297,8 @@ function Futures() {
                     setTransferAmount('');
                     setFromWallet('');
                     setToWallet('');
-                    alert('USDT transfer completed successfully!');
+                    // Replace alert with enhanced success notification
+                    showSuccessNotification(transferAmount);
                 } else {
                     const errorData = await addResponse.json();
                     setTransferError(errorData.error || 'Failed to complete USDT transfer');
@@ -348,7 +368,8 @@ function Futures() {
             if (response.ok) {
                 // For successful responses, just consider it successful without requiring parsing
                 fetchPositions();
-                alert('Position closed successfully');
+                // Show success notification
+                showSuccessToast('Position closed successfully');
                 return;
             }
 
@@ -372,11 +393,68 @@ function Futures() {
         }
     };
 
-    // Fetch positions from the server
-    const fetchPositions = async () => {
+    // Add a new function to transfer funds to futures account
+
+    const transferToFuturesAccount = async () => {
+        if (!fundAmount || isNaN(parseFloat(fundAmount)) || parseFloat(fundAmount) <= 0) {
+            setFundError('Please enter a valid amount');
+            return;
+        }
+
+        setIsFunding(true);
+        setFundError('');
+
         try {
             const token = localStorage.getItem('auth_token');
-            const response = await fetch('http://localhost:8080/futures/positions', {
+            const futuresWallet = wallets.find(w => w.name === 'Futures');
+
+            if (!futuresWallet) {
+                setFundError('Futures wallet not found');
+                return;
+            }
+
+            const response = await fetch('http://localhost:8080/futures/fund-account', {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    wallet_id: futuresWallet.wallet_id,
+                    amount: fundAmount
+                })
+            });
+
+            if (response.ok) {
+                await fetchPositions();
+                await fetchFuturesBalances();
+                await fetchWallets();
+
+                setShowFundModal(false);
+                setFundAmount('');
+                setApiError('');
+
+                // Use the enhanced success notification
+                showSuccessNotification(fundAmount);
+                // Or use the toast version: showSuccessToast(fundAmount);
+
+            } else {
+                const errorData = await response.json();
+                setFundError(errorData.error || 'Failed to fund futures account');
+            }
+        } catch (error) {
+            console.error('Error transferring to futures account:', error);
+            setFundError('Network error. Please try again.');
+        } finally {
+            setIsFunding(false);
+        }
+    };
+
+    // Get futures-specific balance
+    const fetchFuturesBalances = useCallback(async () => {
+        try {
+            const token = localStorage.getItem('auth_token');
+            const response = await fetch('http://localhost:8080/futures/balance', {
                 headers: {
                     'Authorization': `Bearer ${token}`,
                     'Content-Type': 'application/json',
@@ -385,32 +463,51 @@ function Futures() {
 
             if (response.ok) {
                 const data = await response.json();
-                console.log("Raw positions data:", data); // Add this to debug the actual response structure
-
-                // Parse string values to numbers with field name mapping
-                const parsedPositions = (data.positions || []).map(position => ({
-                    ...position,
-                    // Map snake_case backend field names to camelCase frontend names
-                    size: parseFloat(position.size),
-                    entryPrice: parseFloat(position.entry_price || position.entryPrice || 0),
-                    markPrice: parseFloat(position.current_price || position.markPrice || 0),
-                    liquidationPrice: parseFloat(position.liquidation_price || position.liquidationPrice || 0),
-                    margin: parseFloat(position.margin || 0),
-                    unrealizedPnl: parseFloat(position.unrealized_pnl || position.unrealizedPnl || 0),
-                    // Add other fields as needed
-                }));
-
-                setPositions(parsedPositions);
+                console.log('Futures balance data:', data); // Debug log
+                setFuturesAvailableBalance(data.available_balance || '0');
+                setFuturesMarginBalance(data.margin_balance || '0');
             } else {
-                console.error('Failed to fetch positions');
+                console.error('Failed to fetch futures balance:', response.status);
             }
+        } catch (error) {
+            console.error('Error fetching futures balances:', error);
+        }
+    }, []);
+
+    // Fetch positions from the server
+    const fetchPositions = useCallback(async () => {
+        try {
+            const token = localStorage.getItem('auth_token');
+            const response = await fetch('http://localhost:8080/futures/positions', {
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json',
+                },
+            });
+
+            if (response.ok) {
+                const data = await response.json();
+                // Normalize numeric fields to prevent toFixed errors
+                const normalizedPositions = (data.positions || []).map(position => ({
+                    ...position,
+                    size: parseFloat(position.size || 0),
+                    entryPrice: parseFloat(position.entryPrice || position.entry_price || 0),
+                    markPrice: parseFloat(position.markPrice || position.mark_price || position.current_price || 0),
+                    liquidationPrice: parseFloat(position.liquidationPrice || position.liquidation_price || 0),
+                    margin: parseFloat(position.margin || 0),
+                    unrealizedPnl: parseFloat(position.unrealizedPnl || position.unrealized_pnl || 0)
+                }));
+                setPositions(normalizedPositions);
+            }
+
+            await fetchFuturesBalances();
         } catch (error) {
             console.error('Error fetching positions:', error);
         }
-    };
+    }, [fetchFuturesBalances]);
 
     // Fetch P&L history from the server
-    const fetchPnlHistory = async () => {
+    const fetchPnlHistory = useCallback(async () => {
         try {
             const token = localStorage.getItem('auth_token');
             const response = await fetch('http://localhost:8080/futures/pnl-history', {
@@ -422,14 +519,184 @@ function Futures() {
 
             if (response.ok) {
                 const data = await response.json();
-                setPnlHistory(data.pnl_history || []);
+                console.log('Raw P&L data from backend:', data); // Debug log
+
+                // Process and normalize the P&L history data based on your backend structure
+                const normalizedHistory = (data.pnl_history || []).map(record => {
+                    console.log('Processing record:', record); // Debug individual records
+
+                    return {
+                        id: record.id,
+                        symbol: record.symbol || 'BTCUSDT',
+                        side: record.side || 'long',
+                        size: parseFloat(record.size || 0),
+                        entryPrice: parseFloat(record.entry_price || 0),
+                        exitPrice: parseFloat(record.exit_price || 0),
+                        leverage: parseInt(record.leverage || 1),
+                        margin: parseFloat(record.margin || 0),
+                        realizedPnl: parseFloat(record.realized_pnl || 0),
+                        commission: parseFloat(record.commission || 0),
+                        fundingFee: parseFloat(record.funding_fee || 0),
+                        fees: parseFloat(record.fees || record.commission || 0),
+                        date: record.date || record.created_at,
+                        createdAt: record.created_at || record.date
+                    };
+                });
+
+                console.log('Normalized P&L history:', normalizedHistory); // Debug final result
+                setPnlHistory(normalizedHistory);
             } else {
-                console.error('Failed to fetch PnL history');
+                console.error('Failed to fetch PnL history:', response.status, response.statusText);
             }
         } catch (error) {
             console.error('Error fetching PnL history:', error);
         }
+    }, []);
+
+    // Add refresh positions function
+    const refreshPositions = async () => {
+        setIsRefreshingPositions(true);
+        try {
+            await fetchPositions();
+            updatePositionsPnl();
+            // Show brief success feedback
+            const btn = document.querySelector('.refresh-positions-btn');
+            if (btn) {
+                const originalContent = btn.innerHTML;
+                btn.innerHTML = '✓ Refreshed!';
+                setTimeout(() => {
+                    btn.innerHTML = originalContent;
+                }, 1500);
+            }
+        } catch (error) {
+            console.error('Error refreshing positions:', error);
+        } finally {
+            setIsRefreshingPositions(false);
+        }
     };
+
+    // Function to show enhanced success notification
+    const showSuccessNotification = (amount) => {
+        // Remove any existing notifications
+        const existing = document.querySelector('.success-notification-overlay, .success-toast');
+        if (existing) {
+            existing.remove();
+        }
+
+        // Create the enhanced success modal
+        const overlay = document.createElement('div');
+        overlay.className = 'success-notification-overlay';
+
+        overlay.innerHTML = `
+            <div class="success-notification-modal">
+                <div class="success-notification-header">
+                    <div class="success-icon-container">
+                        <div class="success-icon">✓</div>
+                    </div>
+                    <h3 class="success-title">Funding Successful!</h3>
+                </div>
+                
+                <div class="success-notification-content">
+                    <p class="success-message">
+                        Your futures account has been successfully funded and is ready for trading.
+                    </p>
+                    
+                    <div class="success-details">
+                        <div class="success-amount">
+                            <span class="success-amount-value">${amount}</span>
+                            <span class="success-currency">USDT</span>
+                        </div>
+                        <p class="success-description">
+                            Funds have been transferred to your trading account
+                        </p>
+                    </div>
+                    
+                    <div class="success-stats">
+                        <div class="success-stat">
+                            <div class="success-stat-label">Status</div>
+                            <div class="success-stat-value">Active</div>
+                        </div>
+                        <div class="success-stat">
+                            <div class="success-stat-label">Available</div>
+                            <div class="success-stat-value">${amount} USDT</div>
+                        </div>
+                    </div>
+                    
+                    <div class="success-actions">
+                        <button class="success-view-balance-btn" onclick="closeSuccessNotification()">
+                            View Balance
+                        </button>
+                        <button class="success-close-btn" onclick="closeSuccessNotification()">
+                            Continue Trading
+                        </button>
+                    </div>
+                </div>
+                
+                <div class="success-progress-bar"></div>
+            </div>
+        `;
+
+        document.body.appendChild(overlay);
+
+        // Auto-close after 5 seconds
+        setTimeout(() => {
+            closeSuccessNotification();
+        }, 5000);
+
+        // Close on overlay click
+        overlay.addEventListener('click', (e) => {
+            if (e.target === overlay) {
+                closeSuccessNotification();
+            }
+        });
+    };
+
+    // Function to close the success notification
+    const closeSuccessNotification = () => {
+        const overlay = document.querySelector('.success-notification-overlay');
+        if (overlay) {
+            overlay.style.animation = 'fadeInOverlay 0.3s ease-out reverse';
+            setTimeout(() => {
+                overlay.remove();
+            }, 300);
+        }
+    };
+
+    // Alternative: Toast notification for less intrusive feedback
+    const showSuccessToast = (message) => {
+        // Remove any existing toasts
+        const existing = document.querySelector('.success-toast');
+        if (existing) {
+            existing.remove();
+        }
+
+        const toast = document.createElement('div');
+        toast.className = 'success-toast';
+
+        toast.innerHTML = `
+            <div class="success-toast-content">
+                <div class="success-toast-icon">✓</div>
+                <div class="success-toast-text">
+                    <div class="success-toast-title">Success!</div>
+                    <div class="success-toast-message">${message}</div>
+                </div>
+                <button class="success-toast-close" onclick="this.parentElement.parentElement.remove()">×</button>
+            </div>
+        `;
+
+        document.body.appendChild(toast);
+
+        // Auto-remove after 4 seconds
+        setTimeout(() => {
+            if (toast.parentElement) {
+                toast.style.animation = 'slideInToast 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) reverse';
+                setTimeout(() => toast.remove(), 400);
+            }
+        }, 4000);
+    };
+
+    // Make closeSuccessNotification available globally for onclick handlers
+    window.closeSuccessNotification = closeSuccessNotification;
 
     useEffect(() => {
         const fetchUserData = async () => {
@@ -480,8 +747,9 @@ function Futures() {
 
         fetchUserData();
         fetchBtcPrice();
-        fetchPositions(); // Add this
-        fetchPnlHistory(); // Add this
+        fetchPositions();
+        fetchPnlHistory();
+        fetchFuturesBalances();
 
         // Set up interval refreshes
         const priceInterval = setInterval(fetchBtcPrice, 30000);
@@ -491,7 +759,7 @@ function Futures() {
             clearInterval(priceInterval);
             clearInterval(positionsInterval);
         };
-    }, [navigate, fetchBtcPrice]);
+    }, [navigate, fetchBtcPrice, fetchPositions, fetchPnlHistory, fetchFuturesBalances]);
 
     // Update positions P&L when price changes
     useEffect(() => {
@@ -764,6 +1032,26 @@ function Futures() {
                             <div className="positions-panel">
                                 <div className="positions-header">
                                     <h3>Open Positions</h3>
+                                    <div className="positions-header-actions">
+                                        <button
+                                            className="refresh-positions-btn"
+                                            onClick={refreshPositions}
+                                            disabled={isRefreshingPositions}
+                                            title="Refresh position data and unrealized P&L"
+                                        >
+                                            {isRefreshingPositions ? (
+                                                <>
+                                                    <span className="refresh-spinner">⟳</span>
+                                                    Refreshing...
+                                                </>
+                                            ) : (
+                                                <>
+                                                    <span className="refresh-icon">🔄</span>
+                                                    Refresh Positions
+                                                </>
+                                            )}
+                                        </button>
+                                    </div>
                                 </div>
                                 <div className="positions-table">
                                     <div className="table-header">
@@ -790,25 +1078,25 @@ function Futures() {
                                                     </span>
                                                     {position.symbol}
                                                 </div>
-                                                <div className="col">{position.size.toFixed(3)} BTC</div>
+                                                <div className="col">{parseFloat(position.size || 0).toFixed(3)} BTC</div>
                                                 <div className="col">
                                                     <span className={`leverage-display ${position.leverage === 1 ? 'leverage-safe' : ''}`}>
                                                         {position.leverage}x
                                                     </span>
                                                 </div>
                                                 <div className="col">
-                                                    ${isNaN(position.entryPrice) ? '0.00' : position.entryPrice.toFixed(2)}
+                                                    ${isNaN(parseFloat(position.entryPrice)) ? '0.00' : parseFloat(position.entryPrice).toFixed(2)}
                                                 </div>
                                                 <div className="col">
-                                                    ${isNaN(position.markPrice) ? '0.00' : position.markPrice.toFixed(2)}
+                                                    ${isNaN(parseFloat(position.markPrice)) ? '0.00' : parseFloat(position.markPrice).toFixed(2)}
                                                 </div>
                                                 <div className="col">
-                                                    ${isNaN(position.liquidationPrice) ? '0.00' : position.liquidationPrice.toFixed(2)}
+                                                    ${isNaN(parseFloat(position.liquidationPrice)) ? '0.00' : parseFloat(position.liquidationPrice).toFixed(2)}
                                                 </div>
-                                                <div className="col">{position.margin.toFixed(2)} USDT</div>
+                                                <div className="col">{parseFloat(position.margin || 0).toFixed(2)} USDT</div>
                                                 <div className="col">
-                                                    <span className={`pnl ${position.unrealizedPnl >= 0 ? 'positive' : 'negative'}`}>
-                                                        {position.unrealizedPnl >= 0 ? '+' : ''}{position.unrealizedPnl.toFixed(2)} USDT
+                                                    <span className={`pnl ${parseFloat(position.unrealizedPnl || 0) >= 0 ? 'positive' : 'negative'}`}>
+                                                        {parseFloat(position.unrealizedPnl || 0) >= 0 ? '+' : ''}{parseFloat(position.unrealizedPnl || 0).toFixed(2)} USDT
                                                     </span>
                                                     {position.isLiquidated && (
                                                         <span className="liquidated-tag">LIQUIDATED</span>
@@ -818,7 +1106,7 @@ function Futures() {
                                                     <button
                                                         className="close-btn"
                                                         disabled={position.isLiquidated}
-                                                        onClick={() => closePosition(position.id, position.size)}
+                                                        onClick={() => closePosition(position.id, parseFloat(position.size || 0))}
                                                     >
                                                         {position.isLiquidated ? 'Liquidated' : 'Close'}
                                                     </button>
@@ -835,6 +1123,13 @@ function Futures() {
                             <div className="pnl-panel">
                                 <div className="pnl-header">
                                     <h3>Profit & Loss History</h3>
+                                    <button
+                                        className="refresh-btn"
+                                        onClick={() => fetchPnlHistory()}
+                                        disabled={isLoading}
+                                    >
+                                        Refresh
+                                    </button>
                                 </div>
                                 <div className="pnl-table">
                                     <div className="table-header">
@@ -842,36 +1137,113 @@ function Futures() {
                                         <div className="col">Symbol</div>
                                         <div className="col">Side</div>
                                         <div className="col">Size</div>
+                                        <div className="col">Entry Price</div>
+                                        <div className="col">Exit Price</div>
                                         <div className="col">Realized P&L</div>
                                         <div className="col">Fees</div>
                                     </div>
                                     {pnlHistory.length === 0 ? (
                                         <div className="no-pnl">
                                             <p>No P&L history available</p>
+                                            <p>Complete some trades to see your history here.</p>
                                         </div>
                                     ) : (
-                                        pnlHistory.map((record, index) => (
-                                            <div key={index} className="table-row">
-                                                <div className="col">{new Date(record.date).toLocaleDateString()}</div>
-                                                <div className="col">{record.symbol}</div>
-                                                <div className="col">
-                                                    <span className={`side-indicator ${record.side}`}>
-                                                        {record.side.toUpperCase()}
-                                                    </span>
+                                        pnlHistory.map((record, index) => {
+                                            // Safely parse and format date
+                                            let displayDate = 'Invalid Date';
+                                            try {
+                                                const dateStr = record.date || record.createdAt;
+                                                if (dateStr) {
+                                                    const dateObj = new Date(dateStr);
+                                                    if (!isNaN(dateObj.getTime())) {
+                                                        displayDate = dateObj.toLocaleDateString('en-US', {
+                                                            year: 'numeric',
+                                                            month: 'short',
+                                                            day: 'numeric',
+                                                            hour: '2-digit',
+                                                            minute: '2-digit'
+                                                        });
+                                                    }
+                                                }
+                                            } catch (error) {
+                                                console.error('Date parsing error for record:', record, error);
+                                            }
+
+                                            // Ensure all numeric values are properly handled
+                                            const size = Number(record.size || 0);
+                                            const entryPrice = Number(record.entryPrice || 0);
+                                            const exitPrice = Number(record.exitPrice || 0);
+                                            const realizedPnl = Number(record.realizedPnl || 0);
+                                            const fees = Number(record.fees || 0);
+
+                                            return (
+                                                <div key={record.id || index} className="table-row">
+                                                    <div className="col" title={record.date || record.createdAt}>
+                                                        {displayDate}
+                                                    </div>
+                                                    <div className="col">{record.symbol || 'BTCUSDT'}</div>
+                                                    <div className="col">
+                                                        <span className={`side-indicator ${(record.side || 'long').toLowerCase()}`}>
+                                                            {(record.side || 'LONG').toUpperCase()}
+                                                        </span>
+                                                    </div>
+                                                    <div className="col">{size.toFixed(4)} BTC</div>
+                                                    <div className="col">${entryPrice.toFixed(2)}</div>
+                                                    <div className="col">${exitPrice.toFixed(2)}</div>
+                                                    <div className="col">
+                                                        <span className={`pnl ${realizedPnl >= 0 ? 'positive' : 'negative'}`}>
+                                                            {realizedPnl >= 0 ? '+' : ''}{realizedPnl.toFixed(2)} USDT
+                                                        </span>
+                                                    </div>
+                                                    <div className="col">{fees.toFixed(2)} USDT</div>
                                                 </div>
-                                                <div className="col">{record.size.toFixed(3)} BTC</div>
-                                                <div className="col">
-                                                    <span className={`pnl ${record.realizedPnl >= 0 ? 'positive' : 'negative'}`}>
-                                                        {record.realizedPnl >= 0 ? '+' : ''}{record.realizedPnl.toFixed(2)} USDT
-                                                    </span>
-                                                </div>
-                                                <div className="col">{record.fees.toFixed(2)} USDT</div>
-                                            </div>
-                                        ))
+                                            );
+                                        })
                                     )}
                                 </div>
+                                {pnlHistory.length > 0 && (
+                                    <div className="pnl-summary">
+                                        <div className="summary-item">
+                                            <span>Total Trades: {pnlHistory.length}</span>
+                                        </div>
+                                        <div className="summary-item">
+                                            <span>Total P&L: </span>
+                                            <span className={`pnl ${pnlHistory.reduce((sum, record) => sum + (Number(record.realizedPnl || 0)), 0) >= 0 ? 'positive' : 'negative'}`}>
+                                                {pnlHistory.reduce((sum, record) => sum + (Number(record.realizedPnl || 0)), 0).toFixed(2)} USDT
+                                            </span>
+                                        </div>
+                                    </div>
+                                )}
                             </div>
                         )}
+
+                        {/* Add this component to your trading panel */}
+                        <div className="futures-balance-panel">
+                            <h4>Futures Account Balance</h4>
+                            <div className="balance-item">
+                                <span>Main Wallet:</span>
+                                <span>{wallets.find(w => w.name === "Futures")?.balances.find(b => b.cryptocurrency === "USDT")?.balance || "0.00"} USDT</span>
+                            </div>
+                            <div className="balance-item">
+                                <span>Trading Balance:</span>
+                                <span>{(parseFloat(futuresAvailableBalance) + parseFloat(futuresMarginBalance)).toFixed(2)} USDT</span>
+                            </div>
+                            <div className="balance-item">
+                                <span>Available for Trading:</span>
+                                <span>{parseFloat(futuresAvailableBalance).toFixed(2)} USDT</span>
+                            </div>
+                            <div className="balance-item">
+                                <span>In Positions:</span>
+                                <span>{parseFloat(futuresMarginBalance).toFixed(2)} USDT</span>
+                            </div>
+
+                            <button
+                                className="fund-futures-btn"
+                                onClick={() => setShowFundModal(true)}
+                            >
+                                Fund Futures Account
+                            </button>
+                        </div>
                     </div>
 
                     {apiError && (
@@ -1065,6 +1437,89 @@ function Futures() {
                                 </div>
                             </div>
                         )}
+                    </div>
+                </div>
+            )}
+
+            {/* Fund Futures Account Modal */}
+            {showFundModal && (
+                <div className="fund-futures-modal">
+                    <div className="fund-futures-dialog">
+                        <div className="fund-futures-header">
+                            <h3>Fund Futures Account</h3>
+                            <button
+                                className="fund-futures-close"
+                                onClick={() => {
+                                    setShowFundModal(false);
+                                    setFundAmount('');
+                                    setFundError('');
+                                }}
+                            >
+                                ×
+                            </button>
+                        </div>
+
+                        <div className="fund-futures-content">
+                            <div className="fund-info-section">
+                                <div className="fund-info-title">
+                                    Transfer to Trading Account
+                                </div>
+                                <p className="fund-info-description">
+                                    Transfer USDT from your Futures wallet to your active trading account.
+                                    This will make the funds immediately available for futures trading.
+                                </p>
+                            </div>
+
+                            <div className="amount-input-section">
+                                <label>Amount to Transfer</label>
+                                <div className="enhanced-amount-input-group">
+                                    <input
+                                        type="number"
+                                        value={fundAmount}
+                                        onChange={(e) => setFundAmount(e.target.value)}
+                                        placeholder="0.00"
+                                        step="0.01"
+                                        min="0"
+                                        className="enhanced-amount-input"
+                                    />
+                                    <span className="enhanced-currency-label">USDT</span>
+                                </div>
+
+                                <div className="balance-display">
+                                    <span>Available in Futures Wallet:</span>
+                                    <span>
+                                        {wallets.find(w => w.name === "Futures")?.balances.find(b => b.cryptocurrency === "USDT")?.balance || "0.00"} USDT
+                                    </span>
+                                </div>
+                            </div>
+
+                            {fundError && (
+                                <div className="fund-error-message">
+                                    {fundError}
+                                </div>
+                            )}
+
+                            <div className="fund-futures-actions">
+                                <button
+                                    className="fund-cancel-btn"
+                                    onClick={() => {
+                                        setShowFundModal(false);
+                                        setFundAmount('');
+                                        setFundError('');
+                                    }}
+                                    disabled={isFunding}
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    className={`fund-confirm-btn ${isFunding ? 'loading' : ''}`}
+                                    onClick={transferToFuturesAccount}
+                                    disabled={isFunding || !fundAmount}
+                                >
+                                    {isFunding ? 'Processing...' : 'Confirm Transfer'}
+                                </button>
+                            </div>
+                        </div>
                     </div>
                 </div>
             )}
