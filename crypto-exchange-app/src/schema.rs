@@ -15,6 +15,74 @@ diesel::table! {
 }
 
 diesel::table! {
+    funding_rates (id) {
+        id -> Int4,
+        #[max_length = 20]
+        symbol -> Varchar,
+        rate -> Numeric,
+        timestamp -> Timestamptz,
+        next_funding_time -> Timestamptz,
+    }
+}
+
+diesel::table! {
+    futures_balances (id) {
+        id -> Int4,
+        user_id -> Int4,
+        #[max_length = 10]
+        currency -> Varchar,
+        available_balance -> Numeric,
+        margin_balance -> Numeric,
+        unrealized_pnl -> Numeric,
+        last_updated -> Timestamptz,
+    }
+}
+
+diesel::table! {
+    futures_pnl_history (id) {
+        id -> Int4,
+        user_id -> Int4,
+        position_id -> Int4,
+        #[max_length = 20]
+        symbol -> Varchar,
+        #[max_length = 10]
+        side -> Varchar,
+        size -> Numeric,
+        entry_price -> Numeric,
+        exit_price -> Numeric,
+        leverage -> Int4,
+        margin -> Numeric,
+        realized_pnl -> Numeric,
+        commission -> Numeric,
+        funding_fee -> Numeric,
+        created_at -> Timestamptz,
+    }
+}
+
+diesel::table! {
+    futures_positions (id) {
+        id -> Int4,
+        user_id -> Int4,
+        #[max_length = 20]
+        symbol -> Varchar,
+        #[max_length = 10]
+        side -> Varchar,
+        size -> Numeric,
+        entry_price -> Numeric,
+        current_price -> Numeric,
+        leverage -> Int4,
+        margin -> Numeric,
+        liquidation_price -> Numeric,
+        unrealized_pnl -> Numeric,
+        #[max_length = 20]
+        status -> Varchar,
+        created_at -> Timestamptz,
+        updated_at -> Timestamptz,
+        closed_at -> Nullable<Timestamptz>,
+    }
+}
+
+diesel::table! {
     password_reset_tokens (id) {
         id -> Int4,
         user_id -> Int4,
@@ -159,6 +227,10 @@ diesel::table! {
     }
 }
 
+diesel::joinable!(futures_balances -> users (user_id));
+diesel::joinable!(futures_pnl_history -> futures_positions (position_id));
+diesel::joinable!(futures_pnl_history -> users (user_id));
+diesel::joinable!(futures_positions -> users (user_id));
 diesel::joinable!(password_reset_tokens -> users (user_id));
 diesel::joinable!(transactions -> users (user_id));
 diesel::joinable!(transactions -> wallets (wallet_id));
@@ -171,6 +243,10 @@ diesel::joinable!(withdrawals -> wallets (wallet_id));
 
 diesel::allow_tables_to_appear_in_same_query!(
     cryptocurrencies,
+    funding_rates,
+    futures_balances,
+    futures_pnl_history,
+    futures_positions,
     password_reset_tokens,
     transactions,
     user_verifications,

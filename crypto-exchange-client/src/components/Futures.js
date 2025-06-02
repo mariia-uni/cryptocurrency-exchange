@@ -1,7 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import './Futures.css';
 import SearchBox from './SearchBox/SearchBox';
+import TradingViewChart from './TradingViewChart';
 
 function Futures() {
     const navigate = useNavigate();
@@ -19,6 +20,21 @@ function Futures() {
     const [isTransferring, setIsTransferring] = useState(false);
     const [showConfirmation, setShowConfirmation] = useState(false);
     const [transferError, setTransferError] = useState('');
+
+    // Trading states
+    const [btcPrice, setBtcPrice] = useState(0);
+    const [priceLoading, setPriceLoading] = useState(true);
+    const [orderSide, setOrderSide] = useState('long'); // 'long' or 'short'
+    const [orderSize, setOrderSize] = useState('');
+    const [leverage, setLeverage] = useState(1); // Changed default to 1x
+    const [margin, setMargin] = useState('');
+    const [tradingError, setTradingError] = useState('');
+    const [isPlacingOrder, setIsPlacingOrder] = useState(false);
+
+    // Positions and P&L states
+    const [positions, setPositions] = useState([]);
+    const [pnlHistory, setPnlHistory] = useState([]);
+    const [activeTab, setActiveTab] = useState('trading'); // 'trading', 'positions', 'pnl'
 
     // Enhanced function to get proper display name from user data
     const getDisplayName = (user) => {
@@ -46,6 +62,30 @@ function Futures() {
         navigate('/admin');
     };
 
+    // Enhanced fetchBtcPrice to work with TradingView
+    const fetchBtcPrice = useCallback(async () => {
+        try {
+            const response = await fetch('http://localhost:8080/api/markets');
+            if (response.ok) {
+                const data = await response.json();
+                const btcData = data.cryptocurrencies.find(crypto => crypto.symbol === 'BTC');
+                if (btcData) {
+                    setBtcPrice(btcData.price);
+                }
+            }
+        } catch (error) {
+            console.error('Error fetching BTC price:', error);
+        } finally {
+            setPriceLoading(false);
+        }
+    }, []);
+
+    // Handle price updates from TradingView chart
+    const handlePriceUpdate = useCallback((price) => {
+        setBtcPrice(price);
+        setPriceLoading(false);
+    }, []);
+
     // Fetch wallets for transfer functionality
     const fetchWallets = async () => {
         try {
@@ -70,7 +110,16 @@ function Futures() {
         }
     };
 
-    // Get available USDT balance for selected wallet
+    // Get available USDT balance for trading
+    const getAvailableUsdtBalance = () => {
+        const totalUsdt = wallets.reduce((total, wallet) => {
+            const usdtBalance = wallet.balances.find(b => b.cryptocurrency === 'USDT');
+            return total + (usdtBalance ? parseFloat(usdtBalance.balance) : 0);
+        }, 0);
+        return totalUsdt;
+    };
+
+    // Get available USDT balance for selected wallet (for transfers)
     const getAvailableBalance = (walletId) => {
         const wallet = wallets.find(w => w.wallet_id.toString() === walletId);
         if (!wallet) return 0;
@@ -78,6 +127,112 @@ function Futures() {
         const balance = wallet.balances.find(b => b.cryptocurrency === 'USDT');
         return balance ? parseFloat(balance.balance) : 0;
     };
+
+    // Calculate margin requirement
+    const calculateMargin = useCallback(() => {
+        if (!orderSize || !btcPrice || !leverage) return 0;
+        const size = parseFloat(orderSize);
+        const notional = size * btcPrice;
+        return notional / leverage;
+    }, [orderSize, btcPrice, leverage]);
+
+    // Calculate liquidation price with improved safety for 1x leverage
+    const calculateLiquidationPrice = () => {
+        if (!orderSize || !btcPrice || !leverage) return 0;
+
+        // For 1x leverage, liquidation is much more conservative
+        if (leverage === 1) {
+            if (orderSide === 'long') {
+                return btcPrice * 0.05; // 95% loss for 1x long
+            } else {
+                return btcPrice * 20; // 1900% increase for 1x short (very high threshold)
+            }
+        }
+
+        // For higher leverages, use existing calculation
+        const marginRatio = 1 / leverage;
+        if (orderSide === 'long') {
+            return btcPrice * (1 - marginRatio * 0.9); // 90% of margin ratio for safety
+        } else {
+            return btcPrice * (1 + marginRatio * 0.9);
+        }
+    };
+
+    // Enhanced place futures order with 1x leverage support
+    const handlePlaceOrder = async () => {
+        setTradingError('');
+        setIsPlacingOrder(true);
+
+        try {
+            const token = localStorage.getItem('auth_token');
+            const payload = {
+                symbol: "BTCUSDT",
+                side: orderSide,
+                size: orderSize,
+                leverage: leverage
+            };
+
+            const response = await fetch('http://localhost:8080/futures/positions', {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(payload)
+            });
+
+            if (response.ok) {
+                // Parse the JSON response ONCE
+                const result = await response.json();
+                console.log("Position created:", result);
+
+                // Clear form and show success
+                setOrderSize('');
+                setActiveTab('positions');
+                fetchPositions();
+            } else {
+                const errorData = await response.json();
+                setTradingError(errorData.error || 'Failed to create position');
+            }
+        } catch (error) {
+            console.error('Error creating position:', error);
+            setTradingError('Network error when placing order');
+        } finally {
+            setIsPlacingOrder(false);
+        }
+    };
+
+    // Enhanced P&L calculation for different leverage levels
+    const updatePositionsPnl = useCallback(() => {
+        setPositions(prev => prev.map(position => {
+            const priceDiff = btcPrice - position.entryPrice;
+
+            // Calculate unrealized P&L based on leverage
+            let unrealizedPnl;
+            if (position.side === 'long') {
+                unrealizedPnl = priceDiff * position.size;
+            } else {
+                unrealizedPnl = -priceDiff * position.size;
+            }
+
+            // Check for liquidation
+            let isLiquidated = false;
+            if (position.side === 'long' && btcPrice <= position.liquidationPrice) {
+                isLiquidated = true;
+                unrealizedPnl = -position.margin; // Total loss of margin
+            } else if (position.side === 'short' && btcPrice >= position.liquidationPrice) {
+                isLiquidated = true;
+                unrealizedPnl = -position.margin; // Total loss of margin
+            }
+
+            return {
+                ...position,
+                markPrice: btcPrice,
+                unrealizedPnl,
+                isLiquidated
+            };
+        }));
+    }, [btcPrice]);
 
     // Handle transfer submission - USDT only
     const handleTransfer = async () => {
@@ -101,7 +256,6 @@ function Futures() {
             });
 
             if (response.ok) {
-                // Add to destination wallet
                 const addResponse = await fetch('http://localhost:8080/wallet/balance/update', {
                     method: 'POST',
                     headers: {
@@ -168,6 +322,115 @@ function Futures() {
         return true;
     };
 
+    // Close position function
+    const closePosition = async (positionId, size = null) => {
+        try {
+            setApiError('');
+            const token = localStorage.getItem('auth_token');
+
+            const payload = {
+                position_id: positionId // Add explicit position_id field
+            };
+            if (size) {
+                payload.size = size.toString();
+            }
+
+            const response = await fetch(`http://localhost:8080/futures/positions/${positionId}/close`, {
+                method: 'PUT',
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(payload)
+            });
+
+            // Check status first before trying to parse response
+            if (response.ok) {
+                // For successful responses, just consider it successful without requiring parsing
+                fetchPositions();
+                alert('Position closed successfully');
+                return;
+            }
+
+            // Only try to parse error responses
+            let errorMessage = 'Failed to close position';
+            try {
+                // Simple approach - don't try to parse the success response
+                const errorData = await response.json();
+                if (errorData && errorData.error) {
+                    errorMessage = errorData.error;
+                }
+            } catch (jsonError) {
+                console.error("Failed to parse error response:", jsonError);
+                // Use default error message
+            }
+
+            setApiError(errorMessage);
+        } catch (error) {
+            console.error('Error closing position:', error);
+            setApiError('Network error when closing position');
+        }
+    };
+
+    // Fetch positions from the server
+    const fetchPositions = async () => {
+        try {
+            const token = localStorage.getItem('auth_token');
+            const response = await fetch('http://localhost:8080/futures/positions', {
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json',
+                }
+            });
+
+            if (response.ok) {
+                const data = await response.json();
+                console.log("Raw positions data:", data); // Add this to debug the actual response structure
+
+                // Parse string values to numbers with field name mapping
+                const parsedPositions = (data.positions || []).map(position => ({
+                    ...position,
+                    // Map snake_case backend field names to camelCase frontend names
+                    size: parseFloat(position.size),
+                    entryPrice: parseFloat(position.entry_price || position.entryPrice || 0),
+                    markPrice: parseFloat(position.current_price || position.markPrice || 0),
+                    liquidationPrice: parseFloat(position.liquidation_price || position.liquidationPrice || 0),
+                    margin: parseFloat(position.margin || 0),
+                    unrealizedPnl: parseFloat(position.unrealized_pnl || position.unrealizedPnl || 0),
+                    // Add other fields as needed
+                }));
+
+                setPositions(parsedPositions);
+            } else {
+                console.error('Failed to fetch positions');
+            }
+        } catch (error) {
+            console.error('Error fetching positions:', error);
+        }
+    };
+
+    // Fetch P&L history from the server
+    const fetchPnlHistory = async () => {
+        try {
+            const token = localStorage.getItem('auth_token');
+            const response = await fetch('http://localhost:8080/futures/pnl-history', {
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json',
+                }
+            });
+
+            if (response.ok) {
+                const data = await response.json();
+                setPnlHistory(data.pnl_history || []);
+            } else {
+                console.error('Failed to fetch PnL history');
+            }
+        } catch (error) {
+            console.error('Error fetching PnL history:', error);
+        }
+    };
+
     useEffect(() => {
         const fetchUserData = async () => {
             try {
@@ -216,9 +479,32 @@ function Futures() {
         };
 
         fetchUserData();
+        fetchBtcPrice();
+        fetchPositions(); // Add this
+        fetchPnlHistory(); // Add this
 
-        return () => { };
-    }, [navigate]);
+        // Set up interval refreshes
+        const priceInterval = setInterval(fetchBtcPrice, 30000);
+        const positionsInterval = setInterval(fetchPositions, 60000);
+
+        return () => {
+            clearInterval(priceInterval);
+            clearInterval(positionsInterval);
+        };
+    }, [navigate, fetchBtcPrice]);
+
+    // Update positions P&L when price changes
+    useEffect(() => {
+        if (btcPrice > 0) {
+            updatePositionsPnl();
+        }
+    }, [btcPrice, updatePositionsPnl]);
+
+    // Update margin when order size or leverage changes
+    useEffect(() => {
+        const calculatedMargin = calculateMargin();
+        setMargin(calculatedMargin.toFixed(2));
+    }, [orderSize, leverage, btcPrice, calculateMargin]);
 
     if (isLoading) {
         return <div className="loading-container">Loading futures trading...</div>;
@@ -309,28 +595,283 @@ function Futures() {
 
                 <main className="main-content">
                     <div className="futures-container">
-                        <div className="futures-header">
-                            <h2>Futures Trading</h2>
-                            <div className="futures-actions">
-                                <button
-                                    className="transfer-button"
-                                    onClick={() => setShowTransferModal(true)}
-                                >
-                                    <span className="transfer-icon">💲</span>
-                                    Transfer USDT
-                                </button>
-                            </div>
+                        {/* Remove the futures-header section completely */}
+
+                        {/* Trading Tabs */}
+                        <div className="trading-tabs">
+                            <button
+                                className={`tab ${activeTab === 'trading' ? 'active' : ''}`}
+                                onClick={() => setActiveTab('trading')}
+                            >
+                                Trading
+                            </button>
+                            <button
+                                className={`tab ${activeTab === 'positions' ? 'active' : ''}`}
+                                onClick={() => setActiveTab('positions')}
+                            >
+                                Positions ({positions.length})
+                            </button>
+                            <button
+                                className={`tab ${activeTab === 'pnl' ? 'active' : ''}`}
+                                onClick={() => setActiveTab('pnl')}
+                            >
+                                P&L History
+                            </button>
                         </div>
 
-                        <div className="futures-content">
-                            <div className="placeholder-message">
-                                <div className="coming-soon-icon">🚧</div>
-                                <h3>Coming Soon</h3>
-                                <p>Our futures trading platform is currently under development.</p>
-                                <p>Check back later for leveraged trading with perpetual contracts.</p>
-                                <p>Use the Transfer button above to move USDT between your wallets fee-free.</p>
+                        {/* Trading Panel */}
+                        {activeTab === 'trading' && (
+                            <div className="trading-layout">
+                                {/* Enhanced Chart/Market Data Section - Left Side */}
+                                <div className="market-data-section">
+                                    {/* TradingView Chart Integration - Enlarged */}
+                                    <div className="chart-container expanded-large">
+                                        {priceLoading ? (
+                                            <div className="loading-indicator">Loading price data...</div>
+                                        ) : (
+                                            <TradingViewChart
+                                                symbol="BTCUSDT"
+                                                onPriceUpdate={handlePriceUpdate}
+                                            />
+                                        )}
+                                    </div>
+                                </div>
+
+                                {/* Trading Panel - Right Side */}
+                                <div className="trading-panel-right">
+                                    <div className="order-form">
+                                        <div className="order-side-selector">
+                                            <button
+                                                className={`side-btn long ${orderSide === 'long' ? 'active' : ''}`}
+                                                onClick={() => setOrderSide('long')}
+                                            >
+                                                Long
+                                            </button>
+                                            <button
+                                                className={`side-btn short ${orderSide === 'short' ? 'active' : ''}`}
+                                                onClick={() => setOrderSide('short')}
+                                            >
+                                                Short
+                                            </button>
+                                        </div>
+
+                                        <div className="form-group">
+                                            <label>Order Size (BTC)</label>
+                                            <div className="input-group">
+                                                <input
+                                                    type="number"
+                                                    value={orderSize}
+                                                    onChange={(e) => setOrderSize(e.target.value)}
+                                                    placeholder="0.001"
+                                                    step="0.001"
+                                                    min="0.001"
+                                                />
+                                                <span className="input-suffix">BTC</span>
+                                            </div>
+                                        </div>
+
+                                        <div className="form-group">
+                                            <label>Leverage</label>
+                                            <div className="leverage-selector">
+                                                {[1, 5, 10, 20, 50, 100].map(lev => (
+                                                    <button
+                                                        key={lev}
+                                                        className={`leverage-btn ${leverage === lev ? 'active' : ''} ${lev === 1 ? 'leverage-1x' : ''}`}
+                                                        onClick={() => setLeverage(lev)}
+                                                        title={lev === 1 ? 'No Leverage - Safest Option' : `${lev}x Leverage`}
+                                                    >
+                                                        {lev}x
+                                                    </button>
+                                                ))}
+                                            </div>
+                                            {leverage === 1 && (
+                                                <div className="leverage-warning">
+                                                    <span className="safe-icon">🛡️</span>
+                                                    <span>1x leverage - No amplification, lowest risk</span>
+                                                </div>
+                                            )}
+                                        </div>
+
+                                        <div className="form-group">
+                                            <label>Margin Required (USDT)</label>
+                                            <div className="input-group">
+                                                <input
+                                                    type="text"
+                                                    value={margin}
+                                                    readOnly
+                                                    placeholder="0.00"
+                                                />
+                                                <span className="input-suffix">USDT</span>
+                                            </div>
+                                        </div>
+
+                                        <div className="order-summary">
+                                            <div className="summary-item">
+                                                <span>Available Balance:</span>
+                                                <span>{getAvailableUsdtBalance().toFixed(2)} USDT</span>
+                                            </div>
+                                            <div className="summary-item">
+                                                <span>Leverage:</span>
+                                                <span className={leverage === 1 ? 'leverage-safe' : ''}>{leverage}x</span>
+                                            </div>
+                                            <div className="summary-item">
+                                                <span>Est. Liq. Price:</span>
+                                                <span>${calculateLiquidationPrice().toFixed(2)}</span>
+                                            </div>
+                                            {leverage === 1 && (
+                                                <div className="summary-item">
+                                                    <span>Risk Level:</span>
+                                                    <span className="risk-low">Very Low</span>
+                                                </div>
+                                            )}
+                                        </div>
+
+                                        {tradingError && (
+                                            <div className="error-message">
+                                                {tradingError}
+                                            </div>
+                                        )}
+
+                                        <button
+                                            className={`place-order-btn ${orderSide} ${leverage === 1 ? 'safe-trade' : ''}`}
+                                            onClick={handlePlaceOrder}
+                                            disabled={isPlacingOrder || !orderSize || !btcPrice}
+                                        >
+                                            {isPlacingOrder ? 'Placing Order...' : `${orderSide === 'long' ? 'Buy/Long' : 'Sell/Short'} BTC/USDT (${leverage}x)`}
+                                        </button>
+
+                                        {/* Relocated Transfer Button - Under Create Market Contract Panel */}
+                                        <div className="create-market-contract-panel">
+                                            <h4>Create Market Contract</h4>
+                                            <p>Execute trades with advanced order types and risk management</p>
+
+                                            {/* Transfer Button relocated here */}
+                                            <button
+                                                className="transfer-button relocated"
+                                                onClick={() => setShowTransferModal(true)}
+                                            >
+                                                <span className="transfer-icon">💲</span>
+                                                Transfer USDT
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
                             </div>
-                        </div>
+                        )}
+
+                        {/* Enhanced Positions Panel with leverage display */}
+                        {activeTab === 'positions' && (
+                            <div className="positions-panel">
+                                <div className="positions-header">
+                                    <h3>Open Positions</h3>
+                                </div>
+                                <div className="positions-table">
+                                    <div className="table-header">
+                                        <div className="col">Symbol</div>
+                                        <div className="col">Size</div>
+                                        <div className="col">Leverage</div>
+                                        <div className="col">Entry Price</div>
+                                        <div className="col">Mark Price</div>
+                                        <div className="col">Liq. Price</div>
+                                        <div className="col">Margin</div>
+                                        <div className="col">Unrealized P&L</div>
+                                        <div className="col">Actions</div>
+                                    </div>
+                                    {positions.length === 0 ? (
+                                        <div className="no-positions">
+                                            <p>No open positions</p>
+                                        </div>
+                                    ) : (
+                                        positions.map(position => (
+                                            <div key={position.id} className={`table-row ${position.isLiquidated ? 'liquidated' : ''}`}>
+                                                <div className="col">
+                                                    <span className={`side-indicator ${position.side}`}>
+                                                        {position.side.toUpperCase()}
+                                                    </span>
+                                                    {position.symbol}
+                                                </div>
+                                                <div className="col">{position.size.toFixed(3)} BTC</div>
+                                                <div className="col">
+                                                    <span className={`leverage-display ${position.leverage === 1 ? 'leverage-safe' : ''}`}>
+                                                        {position.leverage}x
+                                                    </span>
+                                                </div>
+                                                <div className="col">
+                                                    ${isNaN(position.entryPrice) ? '0.00' : position.entryPrice.toFixed(2)}
+                                                </div>
+                                                <div className="col">
+                                                    ${isNaN(position.markPrice) ? '0.00' : position.markPrice.toFixed(2)}
+                                                </div>
+                                                <div className="col">
+                                                    ${isNaN(position.liquidationPrice) ? '0.00' : position.liquidationPrice.toFixed(2)}
+                                                </div>
+                                                <div className="col">{position.margin.toFixed(2)} USDT</div>
+                                                <div className="col">
+                                                    <span className={`pnl ${position.unrealizedPnl >= 0 ? 'positive' : 'negative'}`}>
+                                                        {position.unrealizedPnl >= 0 ? '+' : ''}{position.unrealizedPnl.toFixed(2)} USDT
+                                                    </span>
+                                                    {position.isLiquidated && (
+                                                        <span className="liquidated-tag">LIQUIDATED</span>
+                                                    )}
+                                                </div>
+                                                <div className="col">
+                                                    <button
+                                                        className="close-btn"
+                                                        disabled={position.isLiquidated}
+                                                        onClick={() => closePosition(position.id, position.size)}
+                                                    >
+                                                        {position.isLiquidated ? 'Liquidated' : 'Close'}
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        ))
+                                    )}
+                                </div>
+                            </div>
+                        )}
+
+                        {/* P&L Panel */}
+                        {activeTab === 'pnl' && (
+                            <div className="pnl-panel">
+                                <div className="pnl-header">
+                                    <h3>Profit & Loss History</h3>
+                                </div>
+                                <div className="pnl-table">
+                                    <div className="table-header">
+                                        <div className="col">Date</div>
+                                        <div className="col">Symbol</div>
+                                        <div className="col">Side</div>
+                                        <div className="col">Size</div>
+                                        <div className="col">Realized P&L</div>
+                                        <div className="col">Fees</div>
+                                    </div>
+                                    {pnlHistory.length === 0 ? (
+                                        <div className="no-pnl">
+                                            <p>No P&L history available</p>
+                                        </div>
+                                    ) : (
+                                        pnlHistory.map((record, index) => (
+                                            <div key={index} className="table-row">
+                                                <div className="col">{new Date(record.date).toLocaleDateString()}</div>
+                                                <div className="col">{record.symbol}</div>
+                                                <div className="col">
+                                                    <span className={`side-indicator ${record.side}`}>
+                                                        {record.side.toUpperCase()}
+                                                    </span>
+                                                </div>
+                                                <div className="col">{record.size.toFixed(3)} BTC</div>
+                                                <div className="col">
+                                                    <span className={`pnl ${record.realizedPnl >= 0 ? 'positive' : 'negative'}`}>
+                                                        {record.realizedPnl >= 0 ? '+' : ''}{record.realizedPnl.toFixed(2)} USDT
+                                                    </span>
+                                                </div>
+                                                <div className="col">{record.fees.toFixed(2)} USDT</div>
+                                            </div>
+                                        ))
+                                    )}
+                                </div>
+                            </div>
+                        )}
                     </div>
 
                     {apiError && (

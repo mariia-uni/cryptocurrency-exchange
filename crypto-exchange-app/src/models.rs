@@ -483,3 +483,178 @@ pub struct WithdrawalHistoryItem {
     pub updated_at: chrono::NaiveDateTime,
     pub completed_at: Option<chrono::NaiveDateTime>,
 }
+
+use crate::schema::{funding_rates, futures_balances, futures_pnl_history, futures_positions};
+
+// Futures Position Models
+#[derive(Queryable, Serialize, Debug, Clone)]
+pub struct FuturesPosition {
+    pub id: i32,
+    pub user_id: i32,
+    pub symbol: String,
+    pub side: String, // 'long' or 'short'
+    pub size: BigDecimal,
+    pub entry_price: BigDecimal,
+    pub current_price: BigDecimal,
+    pub leverage: i32,
+    pub margin: BigDecimal,
+    pub liquidation_price: BigDecimal,
+    pub unrealized_pnl: BigDecimal,
+    pub status: String, // 'open', 'closed', 'liquidated'
+    pub created_at: chrono::DateTime<chrono::Utc>,
+    pub updated_at: chrono::DateTime<chrono::Utc>,
+    pub closed_at: Option<chrono::DateTime<chrono::Utc>>,
+}
+
+#[derive(Insertable, Debug)]
+#[diesel(table_name = futures_positions)]
+pub struct NewFuturesPosition {
+    pub user_id: i32,
+    pub symbol: String,
+    pub side: String,
+    pub size: BigDecimal,
+    pub entry_price: BigDecimal,
+    pub current_price: BigDecimal,
+    pub leverage: i32,
+    pub margin: BigDecimal,
+    pub liquidation_price: BigDecimal,
+    pub unrealized_pnl: BigDecimal,
+    pub status: String,
+}
+
+// P&L History Models
+#[derive(Queryable, Serialize, Debug)]
+pub struct FuturesPnlHistory {
+    pub id: i32,
+    pub user_id: i32,
+    pub position_id: i32,
+    pub symbol: String,
+    pub side: String,
+    pub size: BigDecimal,
+    pub entry_price: BigDecimal,
+    pub exit_price: BigDecimal,
+    pub leverage: i32,
+    pub margin: BigDecimal,
+    pub realized_pnl: BigDecimal,
+    pub commission: BigDecimal,
+    pub funding_fee: BigDecimal,
+    pub created_at: chrono::DateTime<chrono::Utc>,
+}
+
+#[derive(Insertable, Debug)]
+#[diesel(table_name = futures_pnl_history)]
+pub struct NewFuturesPnlHistory {
+    pub user_id: i32,
+    pub position_id: i32,
+    pub symbol: String,
+    pub side: String,
+    pub size: BigDecimal,
+    pub entry_price: BigDecimal,
+    pub exit_price: BigDecimal,
+    pub leverage: i32,
+    pub margin: BigDecimal,
+    pub realized_pnl: BigDecimal,
+    pub commission: BigDecimal,
+    pub funding_fee: BigDecimal,
+}
+
+// Futures Balance Models
+#[derive(Queryable, Serialize, Debug)]
+pub struct FuturesBalance {
+    pub id: i32,
+    pub user_id: i32,
+    pub currency: String,
+    pub available_balance: BigDecimal,
+    pub margin_balance: BigDecimal,
+    pub unrealized_pnl: BigDecimal,
+    pub last_updated: chrono::DateTime<chrono::Utc>,
+}
+
+#[derive(Insertable, Debug)]
+#[diesel(table_name = futures_balances)]
+pub struct NewFuturesBalance {
+    pub user_id: i32,
+    pub currency: String,
+    pub available_balance: BigDecimal,
+    pub margin_balance: BigDecimal,
+    pub unrealized_pnl: BigDecimal,
+}
+
+// Funding Rate Models
+#[derive(Queryable, Serialize, Debug)]
+pub struct FundingRate {
+    pub id: i32,
+    pub symbol: String,
+    pub rate: BigDecimal,
+    pub timestamp: chrono::DateTime<chrono::Utc>,
+    pub next_funding_time: chrono::DateTime<chrono::Utc>,
+}
+
+#[derive(Insertable, Debug)]
+#[diesel(table_name = funding_rates)]
+pub struct NewFundingRate {
+    pub symbol: String,
+    pub rate: BigDecimal,
+    pub next_funding_time: chrono::DateTime<chrono::Utc>,
+}
+
+// Request/Response DTOs
+#[derive(Deserialize, Debug)]
+pub struct CreatePositionRequest {
+    pub symbol: String,
+    pub side: String, // 'long' or 'short'
+    pub size: String, // BigDecimal as string
+    pub leverage: i32,
+}
+
+#[derive(Deserialize, Debug)]
+pub struct ClosePositionRequest {
+    pub position_id: i32,
+    pub size: Option<String>, // Optional partial close
+}
+
+#[derive(Serialize, Debug)]
+pub struct PositionResponse {
+    pub id: i32,
+    pub symbol: String,
+    pub side: String,
+    pub size: String,
+    pub entry_price: String,
+    pub current_price: String,
+    pub leverage: i32,
+    pub margin: String,
+    pub liquidation_price: String,
+    pub unrealized_pnl: String,
+    pub status: String,
+    pub created_at: String,
+    pub updated_at: String,
+}
+
+#[derive(Serialize, Debug)]
+pub struct FuturesBalanceResponse {
+    pub currency: String,
+    pub available_balance: String,
+    pub margin_balance: String,
+    pub unrealized_pnl: String,
+    pub total_balance: String,
+}
+
+impl From<FuturesPosition> for PositionResponse {
+    fn from(position: FuturesPosition) -> Self {
+        Self {
+            id: position.id,
+            symbol: position.symbol,
+            side: position.side,
+            size: position.size.to_string(),
+            entry_price: position.entry_price.to_string(),
+            current_price: position.current_price.to_string(),
+            leverage: position.leverage,
+            margin: position.margin.to_string(),
+            liquidation_price: position.liquidation_price.to_string(),
+            unrealized_pnl: position.unrealized_pnl.to_string(),
+            status: position.status,
+            created_at: position.created_at.to_rfc3339(),
+            updated_at: position.updated_at.to_rfc3339(),
+        }
+    }
+}

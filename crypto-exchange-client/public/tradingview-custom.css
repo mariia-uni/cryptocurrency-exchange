@@ -1,0 +1,76 @@
+/* Custom TradingView styling to match ByBit theme */
+
+/* Chart background and colors */
+.chart-container {
+    background-color: #1a1f2a !important;
+}
+
+/* Toolbar styling */
+.tv-header {
+    background-color: #1e2530 !important;
+    border-bottom: 1px solid #2e3444 !important;
+}
+
+.tv-header__button {
+    color: #8e8e8e !important;
+}
+
+.tv-header__button:hover {
+    background-color: #2e3444 !important;
+    color: #f5f5f5 !important;
+}
+
+/* Scale and axis styling */
+.tv-lightweight-charts__crosshair-line {
+    color: #f0b90b !important;
+}
+
+/* Volume indicator */
+.tv-volume-indicator {
+    opacity: 0.6 !important;
+}
+
+/* Grid lines */
+.tv-lightweight-charts__grid-line {
+    color: rgba(46, 52, 68, 0.5) !important;
+}
+
+/* Watermark */
+.tv-symbol-watermark {
+    color: rgba(142, 142, 142, 0.1) !important;
+}
+
+/* Loading screen */
+.tv-spinner {
+    border-color: #f0b90b !important;
+}
+
+/* Time axis */
+.tv-lightweight-charts__time-axis {
+    background-color: #1a1f2a !important;
+    color: #8e8e8e !important;
+}
+
+/* Price axis */
+.tv-lightweight-charts__price-axis {
+    background-color: #1a1f2a !important;
+    color: #8e8e8e !important;
+}
+
+/* Context menu */
+.tv-context-menu {
+    background-color: #1e2530 !important;
+    border: 1px solid #2e3444 !important;
+    color: #f5f5f5 !important;
+}
+
+.tv-context-menu__item:hover {
+    background-color: #2e3444 !important;
+}
+
+/* Tooltip */
+.tv-float-tooltip {
+    background-color: #1e2530 !important;
+    border: 1px solid #2e3444 !important;
+    color: #f5f5f5 !important;
+}

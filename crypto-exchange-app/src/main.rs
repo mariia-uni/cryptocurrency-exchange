@@ -10,7 +10,7 @@ use diesel::pg::PgConnection;
 use diesel::prelude::*;
 use dotenv::dotenv;
 use env_logger;
-use futures::{StreamExt, TryStreamExt};
+use futures_util::{StreamExt, TryStreamExt};
 use log::{error, info};
 use mime::Mime;
 use sanitize_filename::sanitize;
@@ -1346,6 +1346,7 @@ async fn reset_password(
         })))
     }
 }
+mod futures;
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
     dotenv().ok();
@@ -1453,6 +1454,7 @@ async fn main() -> std::io::Result<()> {
             .configure(deposits::configure_routes)
             .configure(withdrawals::configure_routes)
             .service(portfolio::get_portfolio_distribution) // Add portfolio distribution endpoint
+            .configure(futures::configure_routes) // Add this line
     })
     .bind(format!("{}:{}", host, port))?
     .run()
