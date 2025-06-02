@@ -10,6 +10,16 @@ function Futures() {
     const [apiError, setApiError] = useState('');
     const [isAdmin, setIsAdmin] = useState(false);
 
+    // Transfer modal states
+    const [showTransferModal, setShowTransferModal] = useState(false);
+    const [wallets, setWallets] = useState([]);
+    const [fromWallet, setFromWallet] = useState('');
+    const [toWallet, setToWallet] = useState('');
+    const [transferAmount, setTransferAmount] = useState('');
+    const [isTransferring, setIsTransferring] = useState(false);
+    const [showConfirmation, setShowConfirmation] = useState(false);
+    const [transferError, setTransferError] = useState('');
+
     // Enhanced function to get proper display name from user data
     const getDisplayName = (user) => {
         if (!user) return "Guest";
@@ -34,6 +44,128 @@ function Futures() {
     // Navigate to admin panel if user is admin
     const navigateToAdminPanel = () => {
         navigate('/admin');
+    };
+
+    // Fetch wallets for transfer functionality
+    const fetchWallets = async () => {
+        try {
+            const token = localStorage.getItem('auth_token');
+            if (!token) return;
+
+            const response = await fetch('http://localhost:8080/wallet/list', {
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json',
+                },
+            });
+
+            if (response.ok) {
+                const walletsData = await response.json();
+                if (walletsData.wallets && Array.isArray(walletsData.wallets)) {
+                    setWallets(walletsData.wallets);
+                }
+            }
+        } catch (error) {
+            console.error('Error fetching wallets:', error);
+        }
+    };
+
+    // Get available USDT balance for selected wallet
+    const getAvailableBalance = (walletId) => {
+        const wallet = wallets.find(w => w.wallet_id.toString() === walletId);
+        if (!wallet) return 0;
+
+        const balance = wallet.balances.find(b => b.cryptocurrency === 'USDT');
+        return balance ? parseFloat(balance.balance) : 0;
+    };
+
+    // Handle transfer submission - USDT only
+    const handleTransfer = async () => {
+        setTransferError('');
+        setIsTransferring(true);
+
+        try {
+            const token = localStorage.getItem('auth_token');
+            const response = await fetch('http://localhost:8080/wallet/balance/update', {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    wallet_id: parseInt(fromWallet),
+                    cryptocurrency: 'USDT',
+                    amount: transferAmount,
+                    operation: 'SUBTRACT'
+                }),
+            });
+
+            if (response.ok) {
+                // Add to destination wallet
+                const addResponse = await fetch('http://localhost:8080/wallet/balance/update', {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        wallet_id: parseInt(toWallet),
+                        cryptocurrency: 'USDT',
+                        amount: transferAmount,
+                        operation: 'ADD'
+                    }),
+                });
+
+                if (addResponse.ok) {
+                    // Refresh wallets and close modal
+                    await fetchWallets();
+                    setShowTransferModal(false);
+                    setShowConfirmation(false);
+                    setTransferAmount('');
+                    setFromWallet('');
+                    setToWallet('');
+                    alert('USDT transfer completed successfully!');
+                } else {
+                    const errorData = await addResponse.json();
+                    setTransferError(errorData.error || 'Failed to complete USDT transfer');
+                }
+            } else {
+                const errorData = await response.json();
+                setTransferError(errorData.error || 'Failed to process USDT transfer');
+            }
+        } catch (error) {
+            console.error('Transfer error:', error);
+            setTransferError('Network error. Please try again.');
+        } finally {
+            setIsTransferring(false);
+        }
+    };
+
+    // Validate transfer form - USDT only
+    const validateTransfer = () => {
+        if (!fromWallet || !toWallet || !transferAmount) {
+            setTransferError('Please fill in all fields');
+            return false;
+        }
+
+        if (fromWallet === toWallet) {
+            setTransferError('Cannot transfer to the same wallet');
+            return false;
+        }
+
+        const amount = parseFloat(transferAmount);
+        if (isNaN(amount) || amount <= 0) {
+            setTransferError('Please enter a valid amount');
+            return false;
+        }
+
+        const availableBalance = getAvailableBalance(fromWallet);
+        if (amount > availableBalance) {
+            setTransferError(`Insufficient USDT balance. Available: ${availableBalance} USDT`);
+            return false;
+        }
+
+        return true;
     };
 
     useEffect(() => {
@@ -63,6 +195,9 @@ function Futures() {
                         if (apiUserData && apiUserData.is_admin) {
                             setIsAdmin(true);
                         }
+
+                        // Fetch wallets after user data is loaded
+                        await fetchWallets();
                     } else if (userResponse.status === 401) {
                         localStorage.removeItem('auth_token');
                         navigate('/login');
@@ -176,6 +311,15 @@ function Futures() {
                     <div className="futures-container">
                         <div className="futures-header">
                             <h2>Futures Trading</h2>
+                            <div className="futures-actions">
+                                <button
+                                    className="transfer-button"
+                                    onClick={() => setShowTransferModal(true)}
+                                >
+                                    <span className="transfer-icon">💲</span>
+                                    Transfer USDT
+                                </button>
+                            </div>
                         </div>
 
                         <div className="futures-content">
@@ -184,6 +328,7 @@ function Futures() {
                                 <h3>Coming Soon</h3>
                                 <p>Our futures trading platform is currently under development.</p>
                                 <p>Check back later for leveraged trading with perpetual contracts.</p>
+                                <p>Use the Transfer button above to move USDT between your wallets fee-free.</p>
                             </div>
                         </div>
                     </div>
@@ -195,6 +340,193 @@ function Futures() {
                     )}
                 </main>
             </div>
+
+            {/* Transfer Modal */}
+            {showTransferModal && (
+                <div className="modal-overlay">
+                    <div className="transfer-modal">
+                        <div className="modal-header">
+                            <h3>Transfer USDT Between Wallets</h3>
+                            <button
+                                className="close-button"
+                                onClick={() => {
+                                    setShowTransferModal(false);
+                                    setShowConfirmation(false);
+                                    setTransferError('');
+                                }}
+                            >
+                                ×
+                            </button>
+                        </div>
+
+                        {!showConfirmation ? (
+                            <div className="modal-content">
+                                <div className="usdt-info">
+                                    <div className="usdt-notice">
+                                        <span className="usdt-icon">💲</span>
+                                        <span>USDT Fee-Free Transfers Only</span>
+                                    </div>
+                                    <p>Transfer USDT between your wallets with zero fees</p>
+                                </div>
+
+                                <div className="form-group">
+                                    <label>From Wallet</label>
+                                    <select
+                                        value={fromWallet}
+                                        onChange={(e) => setFromWallet(e.target.value)}
+                                        className="wallet-select"
+                                    >
+                                        <option value="">Select source wallet</option>
+                                        {wallets.filter(wallet => {
+                                            const usdtBalance = wallet.balances.find(b => b.cryptocurrency === 'USDT');
+                                            return usdtBalance && parseFloat(usdtBalance.balance) > 0;
+                                        }).map(wallet => (
+                                            <option key={wallet.wallet_id} value={wallet.wallet_id}>
+                                                {wallet.name} - {getAvailableBalance(wallet.wallet_id.toString())} USDT
+                                            </option>
+                                        ))}
+                                    </select>
+                                </div>
+
+                                <div className="form-group">
+                                    <label>To Wallet</label>
+                                    <select
+                                        value={toWallet}
+                                        onChange={(e) => setToWallet(e.target.value)}
+                                        className="wallet-select"
+                                    >
+                                        <option value="">Select destination wallet</option>
+                                        {wallets.filter(w => w.wallet_id.toString() !== fromWallet).map(wallet => (
+                                            <option key={wallet.wallet_id} value={wallet.wallet_id}>
+                                                {wallet.name}
+                                            </option>
+                                        ))}
+                                    </select>
+                                </div>
+
+                                <div className="form-group">
+                                    <label>Amount (USDT)</label>
+                                    <div className="amount-input-group">
+                                        <input
+                                            type="number"
+                                            value={transferAmount}
+                                            onChange={(e) => setTransferAmount(e.target.value)}
+                                            placeholder="0.00"
+                                            step="0.01"
+                                            min="0"
+                                            className="amount-input"
+                                        />
+                                        <span className="currency-label">USDT</span>
+                                        {fromWallet && (
+                                            <button
+                                                className="max-button"
+                                                onClick={() => setTransferAmount(getAvailableBalance(fromWallet).toString())}
+                                            >
+                                                MAX
+                                            </button>
+                                        )}
+                                    </div>
+                                    {fromWallet && (
+                                        <div className="available-balance">
+                                            Available: {getAvailableBalance(fromWallet)} USDT
+                                        </div>
+                                    )}
+                                </div>
+
+                                <div className="fee-info">
+                                    <div className="fee-item">
+                                        <span>Transfer Fee:</span>
+                                        <span className="fee-free">FREE</span>
+                                    </div>
+                                    <div className="fee-item">
+                                        <span>Network:</span>
+                                        <span>Internal Transfer</span>
+                                    </div>
+                                </div>
+
+                                {transferError && (
+                                    <div className="error-message">
+                                        {transferError}
+                                    </div>
+                                )}
+
+                                <div className="modal-actions">
+                                    <button
+                                        className="cancel-button"
+                                        onClick={() => {
+                                            setShowTransferModal(false);
+                                            setTransferError('');
+                                        }}
+                                    >
+                                        Cancel
+                                    </button>
+                                    <button
+                                        className="continue-button"
+                                        onClick={() => {
+                                            if (validateTransfer()) {
+                                                setShowConfirmation(true);
+                                            }
+                                        }}
+                                    >
+                                        Continue
+                                    </button>
+                                </div>
+                            </div>
+                        ) : (
+                            <div className="confirmation-content">
+                                <div className="confirmation-details">
+                                    <h4>Confirm USDT Transfer</h4>
+                                    <div className="transfer-summary">
+                                        <div className="summary-item">
+                                            <span>From:</span>
+                                            <span>{wallets.find(w => w.wallet_id.toString() === fromWallet)?.name}</span>
+                                        </div>
+                                        <div className="summary-item">
+                                            <span>To:</span>
+                                            <span>{wallets.find(w => w.wallet_id.toString() === toWallet)?.name}</span>
+                                        </div>
+                                        <div className="summary-item">
+                                            <span>Amount:</span>
+                                            <span>{transferAmount} USDT</span>
+                                        </div>
+                                        <div className="summary-item">
+                                            <span>Fee:</span>
+                                            <span className="fee-free">FREE</span>
+                                        </div>
+                                        <div className="summary-item">
+                                            <span>You'll Receive:</span>
+                                            <span className="receive-amount">{transferAmount} USDT</span>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {transferError && (
+                                    <div className="error-message">
+                                        {transferError}
+                                    </div>
+                                )}
+
+                                <div className="modal-actions">
+                                    <button
+                                        className="back-button"
+                                        onClick={() => setShowConfirmation(false)}
+                                        disabled={isTransferring}
+                                    >
+                                        Back
+                                    </button>
+                                    <button
+                                        className="confirm-button"
+                                        onClick={handleTransfer}
+                                        disabled={isTransferring}
+                                    >
+                                        {isTransferring ? 'Processing...' : 'Confirm USDT Transfer'}
+                                    </button>
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                </div>
+            )}
 
             <footer className="dashboard-footer">
                 <div className="footer-links">

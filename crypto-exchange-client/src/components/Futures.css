@@ -19,6 +19,37 @@
     margin: 0;
 }
 
+.futures-actions {
+    display: flex;
+    gap: 12px;
+}
+
+.transfer-button {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: linear-gradient(135deg, #f0b90b 0%, #f7931e 100%);
+    color: #000;
+    border: none;
+    padding: 10px 20px;
+    border-radius: 6px;
+    font-weight: 600;
+    font-size: 14px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    box-shadow: 0 2px 8px rgba(240, 185, 11, 0.2);
+}
+
+.transfer-button:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(240, 185, 11, 0.3);
+    background: linear-gradient(135deg, #f7931e 0%, #f0b90b 100%);
+}
+
+.transfer-icon {
+    font-size: 16px;
+}
+
 .futures-content {
     background-color: #1e2530;
     border-radius: 8px;
@@ -53,4 +84,373 @@
     margin: 5px 0;
     font-size: 16px;
     line-height: 1.5;
+}
+
+/* Transfer Modal Styles */
+.modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.75);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+    backdrop-filter: blur(4px);
+}
+
+.transfer-modal {
+    background: #1e2530;
+    border: 1px solid #2e3444;
+    border-radius: 12px;
+    width: 90%;
+    max-width: 480px;
+    max-height: 90vh;
+    overflow-y: auto;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+}
+
+.modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 20px 24px;
+    border-bottom: 1px solid #2e3444;
+}
+
+.modal-header h3 {
+    color: #f5f5f5;
+    font-size: 18px;
+    font-weight: 600;
+    margin: 0;
+}
+
+.close-button {
+    background: none;
+    border: none;
+    color: #999;
+    font-size: 24px;
+    cursor: pointer;
+    padding: 0;
+    width: 30px;
+    height: 30px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 6px;
+    transition: all 0.2s ease;
+}
+
+.close-button:hover {
+    background: #2e3444;
+    color: #fff;
+}
+
+.modal-content,
+.confirmation-content {
+    padding: 24px;
+}
+
+.form-group {
+    margin-bottom: 20px;
+}
+
+.form-group label {
+    display: block;
+    color: #f5f5f5;
+    font-weight: 500;
+    margin-bottom: 8px;
+    font-size: 14px;
+}
+
+.crypto-select,
+.wallet-select {
+    width: 100%;
+    background: #262d3a;
+    border: 1px solid #3e4651;
+    border-radius: 6px;
+    color: #f5f5f5;
+    padding: 12px 16px;
+    font-size: 14px;
+    transition: all 0.2s ease;
+}
+
+.crypto-select:focus,
+.wallet-select:focus {
+    outline: none;
+    border-color: #f0b90b;
+    box-shadow: 0 0 0 2px rgba(240, 185, 11, 0.1);
+}
+
+.crypto-select option,
+.wallet-select option {
+    background: #262d3a;
+    color: #f5f5f5;
+}
+
+.amount-input-group {
+    position: relative;
+    display: flex;
+    align-items: center;
+}
+
+.amount-input {
+    width: 100%;
+    background: #262d3a;
+    border: 1px solid #3e4651;
+    border-radius: 6px;
+    color: #f5f5f5;
+    padding: 12px 100px 12px 16px;
+    /* Increased right padding from 80px to 100px */
+    font-size: 14px;
+    transition: all 0.2s ease;
+}
+
+.amount-input:focus {
+    outline: none;
+    border-color: #f0b90b;
+    box-shadow: 0 0 0 2px rgba(240, 185, 11, 0.1);
+}
+
+.currency-label {
+    position: absolute;
+    right: 65px;
+    /* Moved from 50px to 65px to give more space */
+    color: #999;
+    font-size: 14px;
+    pointer-events: none;
+}
+
+.max-button {
+    position: absolute;
+    right: 8px;
+    background: #f0b90b;
+    color: #000;
+    border: none;
+    padding: 6px 10px;
+    /* Increased padding from 4px 8px to 6px 10px for better touch target */
+    border-radius: 4px;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    min-width: 40px;
+    /* Added minimum width for consistency */
+}
+
+.max-button:hover {
+    background: #f7931e;
+}
+
+.available-balance {
+    margin-top: 6px;
+    font-size: 12px;
+    color: #999;
+}
+
+.fee-info {
+    background: #262d3a;
+    border: 1px solid #3e4651;
+    border-radius: 6px;
+    padding: 16px;
+    margin-bottom: 20px;
+}
+
+.fee-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    color: #f5f5f5;
+    font-size: 14px;
+}
+
+.fee-free {
+    color: #02c076;
+    font-weight: 600;
+}
+
+.modal-actions {
+    display: flex;
+    gap: 12px;
+    margin-top: 24px;
+}
+
+.cancel-button,
+.back-button {
+    flex: 1;
+    background: #262d3a;
+    color: #f5f5f5;
+    border: 1px solid #3e4651;
+    padding: 12px 24px;
+    border-radius: 6px;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.cancel-button:hover,
+.back-button:hover {
+    background: #3e4651;
+}
+
+.continue-button,
+.confirm-button {
+    flex: 1;
+    background: linear-gradient(135deg, #f0b90b 0%, #f7931e 100%);
+    color: #000;
+    border: none;
+    padding: 12px 24px;
+    border-radius: 6px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.continue-button:hover,
+.confirm-button:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(240, 185, 11, 0.3);
+}
+
+.continue-button:disabled,
+.confirm-button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    transform: none;
+}
+
+.error-message {
+    background: rgba(244, 67, 54, 0.1);
+    border: 1px solid rgba(244, 67, 54, 0.3);
+    color: #f44336;
+    padding: 12px 16px;
+    border-radius: 6px;
+    font-size: 14px;
+    margin-bottom: 16px;
+}
+
+.confirmation-details h4 {
+    color: #f5f5f5;
+    font-size: 16px;
+    font-weight: 600;
+    margin-bottom: 16px;
+}
+
+.transfer-summary {
+    background: #262d3a;
+    border: 1px solid #3e4651;
+    border-radius: 6px;
+    padding: 16px;
+}
+
+.summary-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 0;
+    border-bottom: 1px solid #3e4651;
+    font-size: 14px;
+}
+
+.summary-item:last-child {
+    border-bottom: none;
+}
+
+.summary-item span:first-child {
+    color: #999;
+}
+
+.summary-item span:last-child {
+    color: #f5f5f5;
+    font-weight: 500;
+}
+
+/* USDT-specific styles */
+.usdt-info {
+    margin-bottom: 24px;
+    padding: 16px;
+    background: rgba(240, 185, 11, 0.1);
+    border: 1px solid rgba(240, 185, 11, 0.2);
+    border-radius: 8px;
+}
+
+.usdt-notice {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-weight: 600;
+    color: #f0b90b;
+    margin-bottom: 8px;
+}
+
+.usdt-icon {
+    font-size: 18px;
+}
+
+.usdt-info p {
+    color: #b0b0b0;
+    margin: 0;
+    font-size: 14px;
+}
+
+.receive-amount {
+    color: #02c076 !important;
+    font-weight: 600;
+}
+
+/* Remove the duplicate USDT text from transfer button */
+.transfer-button::after {
+    content: "";
+    /* Removed: content: " USDT"; */
+    font-size: 11px;
+    opacity: 0.8;
+}
+
+/* Enhanced modal for USDT transfers */
+.transfer-modal .modal-header h3::after {
+    content: " (USDT Only)";
+    font-size: 14px;
+    color: #f0b90b;
+    font-weight: 400;
+}
+
+/* Wallet selector improvements for USDT */
+.wallet-select option:disabled {
+    color: #666;
+    background: #1a1a1a;
+}
+
+/* USDT amount input styling */
+.amount-input[step="0.01"] {
+    background: rgba(240, 185, 11, 0.05);
+    border-color: rgba(240, 185, 11, 0.2);
+}
+
+.amount-input[step="0.01"]:focus {
+    border-color: #f0b90b;
+    box-shadow: 0 0 0 2px rgba(240, 185, 11, 0.15);
+}
+
+/* Enhanced fee info for USDT */
+.fee-info {
+    background: rgba(2, 192, 118, 0.05);
+    border: 1px solid rgba(2, 192, 118, 0.2);
+}
+
+.fee-item:last-child {
+    margin-top: 8px;
+    padding-top: 8px;
+    border-top: 1px solid rgba(2, 192, 118, 0.1);
+}
+
+/* Confirmation summary for USDT */
+.transfer-summary .summary-item:last-child {
+    background: rgba(2, 192, 118, 0.1);
+    margin: 8px -16px -16px -16px;
+    padding: 12px 16px;
+    border-radius: 0 0 6px 6px;
 }
