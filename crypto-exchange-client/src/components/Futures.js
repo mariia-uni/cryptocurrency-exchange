@@ -21,12 +21,6 @@ function Futures() {
     const [showConfirmation, setShowConfirmation] = useState(false);
     const [transferError, setTransferError] = useState('');
 
-    // Fund modal states
-    const [showFundModal, setShowFundModal] = useState(false);
-    const [fundAmount, setFundAmount] = useState('');
-    const [fundError, setFundError] = useState('');
-    const [isFunding, setIsFunding] = useState(false);
-
     // Trading states
     const [btcPrice, setBtcPrice] = useState(0);
     const [priceLoading, setPriceLoading] = useState(true);
@@ -48,6 +42,12 @@ function Futures() {
 
     // Refresh state for positions
     const [isRefreshingPositions, setIsRefreshingPositions] = useState(false);
+
+    // Enhanced transfer functionality states
+    const [selectedMainWallet, setSelectedMainWallet] = useState('');
+    const [transferToFuturesAmount, setTransferToFuturesAmount] = useState('');
+    const [showFuturesTransferConfirmation, setShowFuturesTransferConfirmation] = useState(false);
+    const [isFuturesTransfer, setIsFuturesTransfer] = useState(false);
 
     // Enhanced function to get proper display name from user data
     const getDisplayName = (user) => {
@@ -123,13 +123,9 @@ function Futures() {
         }
     };
 
-    // Get available USDT balance for trading
-    const getAvailableUsdtBalance = () => {
-        const totalUsdt = wallets.reduce((total, wallet) => {
-            const usdtBalance = wallet.balances.find(b => b.cryptocurrency === 'USDT');
-            return total + (usdtBalance ? parseFloat(usdtBalance.balance) : 0);
-        }, 0);
-        return totalUsdt;
+    // Add a new function specifically for Futures Account balance
+    const getFuturesAccountBalance = () => {
+        return parseFloat(futuresAvailableBalance) || 0;
     };
 
     // Get available USDT balance for selected wallet (for transfers)
@@ -174,6 +170,31 @@ function Futures() {
     // Enhanced place futures order with 1x leverage support
     const handlePlaceOrder = async () => {
         setTradingError('');
+
+        // Enhanced validation for futures balance
+        const availableFuturesBalance = parseFloat(futuresAvailableBalance);
+        const requiredMargin = calculateMargin();
+
+        if (availableFuturesBalance === 0) {
+            setTradingError('No funds available for trading. Please transfer USDT to your futures account first.');
+            return;
+        }
+
+        if (requiredMargin > availableFuturesBalance) {
+            setTradingError(`Insufficient futures balance. Required: ${requiredMargin.toFixed(2)} USDT, Available: ${availableFuturesBalance.toFixed(2)} USDT`);
+            return;
+        }
+
+        if (!orderSize || parseFloat(orderSize) <= 0) {
+            setTradingError('Please enter a valid order size');
+            return;
+        }
+
+        if (!btcPrice || btcPrice <= 0) {
+            setTradingError('Unable to get current market price');
+            return;
+        }
+
         setIsPlacingOrder(true);
 
         try {
@@ -195,14 +216,14 @@ function Futures() {
             });
 
             if (response.ok) {
-                // Parse the JSON response ONCE
                 const result = await response.json();
                 console.log("Position created:", result);
 
                 // Clear form and show success
                 setOrderSize('');
                 setActiveTab('positions');
-                fetchPositions();
+                await fetchPositions();
+                await fetchFuturesBalances(); // Refresh balances after position creation
             } else {
                 const errorData = await response.json();
                 setTradingError(errorData.error || 'Failed to create position');
@@ -342,6 +363,110 @@ function Futures() {
         return true;
     };
 
+    // New function to validate Futures-specific transfer
+    const validateFuturesTransfer = () => {
+        if (!selectedMainWallet || !transferToFuturesAmount) {
+            setTransferError('Please select a wallet and enter an amount');
+            return false;
+        }
+
+        const amount = parseFloat(transferToFuturesAmount);
+        if (isNaN(amount) || amount <= 0) {
+            setTransferError('Please enter a valid amount greater than 0');
+            return false;
+        }
+
+        const availableBalance = getAvailableBalance(selectedMainWallet);
+        if (amount > availableBalance) {
+            setTransferError(`Insufficient USDT balance. Available: ${availableBalance.toFixed(2)} USDT`);
+            return false;
+        }
+
+        // Check minimum transfer amount
+        if (amount < 0.01) {
+            setTransferError('Minimum transfer amount is 0.01 USDT');
+            return false;
+        }
+
+        return true;
+    };
+
+    // Add this new function to handle Futures-specific transfers
+    const handleFuturesTransfer = async () => {
+        setTransferError('');
+        setIsTransferring(true);
+
+        try {
+            const token = localStorage.getItem('auth_token');
+
+            // Validate that we have a selected source wallet
+            if (!selectedMainWallet || !transferToFuturesAmount) {
+                setTransferError('Please select a source wallet and enter an amount');
+                setIsTransferring(false);
+                return;
+            }
+
+            // Validate the source wallet exists and has sufficient balance
+            const sourceWallet = wallets.find(w => w.wallet_id.toString() === selectedMainWallet);
+            if (!sourceWallet) {
+                setTransferError('Selected wallet not found');
+                setIsTransferring(false);
+                return;
+            }
+
+            const usdtBalance = sourceWallet.balances.find(b => b.cryptocurrency === 'USDT');
+            const availableBalance = usdtBalance ? parseFloat(usdtBalance.balance) : 0;
+            const transferAmount = parseFloat(transferToFuturesAmount);
+
+            if (availableBalance < transferAmount) {
+                setTransferError(`Insufficient balance. Available: ${availableBalance.toFixed(2)} USDT`);
+                setIsTransferring(false);
+                return;
+            }
+
+            // FIXED: Use the corrected futures fund endpoint that handles both operations atomically
+            const fundResponse = await fetch('http://localhost:8080/futures/fund-account', {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    wallet_id: parseInt(selectedMainWallet),
+                    amount: transferToFuturesAmount
+                }),
+            });
+
+            if (!fundResponse.ok) {
+                const errorData = await fundResponse.json();
+                throw new Error(errorData.error || 'Failed to transfer to Futures account');
+            }
+
+            // Refresh all data
+            await Promise.all([
+                fetchWallets(),
+                fetchFuturesBalances()
+            ]);
+
+            // Close modal and reset state
+            setShowTransferModal(false);
+            setShowFuturesTransferConfirmation(false);
+            setTransferToFuturesAmount('');
+            setSelectedMainWallet('');
+            setTransferError('');
+            setIsFuturesTransfer(false);
+
+            // Show success notification
+            showSuccessToast(`Successfully transferred ${transferToFuturesAmount} USDT to Futures Account`);
+
+        } catch (error) {
+            console.error('Futures transfer error:', error);
+            setTransferError(error.message || 'Network error. Please try again.');
+        } finally {
+            setIsTransferring(false);
+        }
+    };
+
     // Close position function
     const closePosition = async (positionId, size = null) => {
         try {
@@ -393,63 +518,6 @@ function Futures() {
         }
     };
 
-    // Add a new function to transfer funds to futures account
-
-    const transferToFuturesAccount = async () => {
-        if (!fundAmount || isNaN(parseFloat(fundAmount)) || parseFloat(fundAmount) <= 0) {
-            setFundError('Please enter a valid amount');
-            return;
-        }
-
-        setIsFunding(true);
-        setFundError('');
-
-        try {
-            const token = localStorage.getItem('auth_token');
-            const futuresWallet = wallets.find(w => w.name === 'Futures');
-
-            if (!futuresWallet) {
-                setFundError('Futures wallet not found');
-                return;
-            }
-
-            const response = await fetch('http://localhost:8080/futures/fund-account', {
-                method: 'POST',
-                headers: {
-                    'Authorization': `Bearer ${token}`,
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                    wallet_id: futuresWallet.wallet_id,
-                    amount: fundAmount
-                })
-            });
-
-            if (response.ok) {
-                await fetchPositions();
-                await fetchFuturesBalances();
-                await fetchWallets();
-
-                setShowFundModal(false);
-                setFundAmount('');
-                setApiError('');
-
-                // Use the enhanced success notification
-                showSuccessNotification(fundAmount);
-                // Or use the toast version: showSuccessToast(fundAmount);
-
-            } else {
-                const errorData = await response.json();
-                setFundError(errorData.error || 'Failed to fund futures account');
-            }
-        } catch (error) {
-            console.error('Error transferring to futures account:', error);
-            setFundError('Network error. Please try again.');
-        } finally {
-            setIsFunding(false);
-        }
-    };
-
     // Get futures-specific balance
     const fetchFuturesBalances = useCallback(async () => {
         try {
@@ -463,14 +531,21 @@ function Futures() {
 
             if (response.ok) {
                 const data = await response.json();
-                console.log('Futures balance data:', data); // Debug log
-                setFuturesAvailableBalance(data.available_balance || '0');
-                setFuturesMarginBalance(data.margin_balance || '0');
+                console.log('Futures balance data:', data);
+                // Ensure we display 0.00 if no balance exists
+                setFuturesAvailableBalance(data.available_balance || '0.00');
+                setFuturesMarginBalance(data.margin_balance || '0.00');
             } else {
                 console.error('Failed to fetch futures balance:', response.status);
+                // Set default 0 values if fetch fails
+                setFuturesAvailableBalance('0.00');
+                setFuturesMarginBalance('0.00');
             }
         } catch (error) {
             console.error('Error fetching futures balances:', error);
+            // Set default 0 values on error
+            setFuturesAvailableBalance('0.00');
+            setFuturesMarginBalance('0.00');
         }
     }, []);
 
@@ -549,7 +624,7 @@ function Futures() {
                 console.error('Failed to fetch PnL history:', response.status, response.statusText);
             }
         } catch (error) {
-            console.error('Error fetching PnL history:', error);
+            console.error('Error fetching P&L history:', error);
         }
     }, []);
 
@@ -751,7 +826,7 @@ function Futures() {
         fetchPnlHistory();
         fetchFuturesBalances();
 
-        // Set up interval refreshes
+        // Set up interval refreshs
         const priceInterval = setInterval(fetchBtcPrice, 30000);
         const positionsInterval = setInterval(fetchPositions, 60000);
 
@@ -976,7 +1051,7 @@ function Futures() {
                                         <div className="order-summary">
                                             <div className="summary-item">
                                                 <span>Available Balance:</span>
-                                                <span>{getAvailableUsdtBalance().toFixed(2)} USDT</span>
+                                                <span>{getFuturesAccountBalance().toFixed(2)} USDT</span>
                                             </div>
                                             <div className="summary-item">
                                                 <span>Leverage:</span>
@@ -1016,10 +1091,14 @@ function Futures() {
                                             {/* Transfer Button relocated here */}
                                             <button
                                                 className="transfer-button relocated"
-                                                onClick={() => setShowTransferModal(true)}
+                                                onClick={() => {
+                                                    setShowTransferModal(true);
+                                                    setIsFuturesTransfer(true);
+                                                    setTransferError('');
+                                                }}
                                             >
                                                 <span className="transfer-icon">💲</span>
-                                                Transfer USDT
+                                                Transfer to Futures Account
                                             </button>
                                         </div>
                                     </div>
@@ -1096,7 +1175,7 @@ function Futures() {
                                                 <div className="col">{parseFloat(position.margin || 0).toFixed(2)} USDT</div>
                                                 <div className="col">
                                                     <span className={`pnl ${parseFloat(position.unrealizedPnl || 0) >= 0 ? 'positive' : 'negative'}`}>
-                                                        {parseFloat(position.unrealizedPnl || 0) >= 0 ? '+' : ''}{parseFloat(position.unrealizedPnl || 0).toFixed(2)} USDT
+                                                        {parseFloat(position.unrealizedPnl || 0) >= 0 ? '+' : ''}{parseFloat(position.unrealizedPnl || 0).toFixed(5)} USDT
                                                     </span>
                                                     {position.isLiquidated && (
                                                         <span className="liquidated-tag">LIQUIDATED</span>
@@ -1140,6 +1219,7 @@ function Futures() {
                                         <div className="col">Entry Price</div>
                                         <div className="col">Exit Price</div>
                                         <div className="col">Realized P&L</div>
+                                        <div className="col">Funding Fee</div>
                                         <div className="col">Fees</div>
                                     </div>
                                     {pnlHistory.length === 0 ? (
@@ -1149,32 +1229,13 @@ function Futures() {
                                         </div>
                                     ) : (
                                         pnlHistory.map((record, index) => {
-                                            // Safely parse and format date
-                                            let displayDate = 'Invalid Date';
-                                            try {
-                                                const dateStr = record.date || record.createdAt;
-                                                if (dateStr) {
-                                                    const dateObj = new Date(dateStr);
-                                                    if (!isNaN(dateObj.getTime())) {
-                                                        displayDate = dateObj.toLocaleDateString('en-US', {
-                                                            year: 'numeric',
-                                                            month: 'short',
-                                                            day: 'numeric',
-                                                            hour: '2-digit',
-                                                            minute: '2-digit'
-                                                        });
-                                                    }
-                                                }
-                                            } catch (error) {
-                                                console.error('Date parsing error for record:', record, error);
-                                            }
-
-                                            // Ensure all numeric values are properly handled
+                                            const displayDate = new Date(record.date || record.createdAt).toLocaleString();
                                             const size = Number(record.size || 0);
                                             const entryPrice = Number(record.entryPrice || 0);
                                             const exitPrice = Number(record.exitPrice || 0);
                                             const realizedPnl = Number(record.realizedPnl || 0);
                                             const fees = Number(record.fees || 0);
+                                            const fundingFee = Number(record.fundingFee || 0); // Get the funding fee value
 
                                             return (
                                                 <div key={record.id || index} className="table-row">
@@ -1192,7 +1253,12 @@ function Futures() {
                                                     <div className="col">${exitPrice.toFixed(2)}</div>
                                                     <div className="col">
                                                         <span className={`pnl ${realizedPnl >= 0 ? 'positive' : 'negative'}`}>
-                                                            {realizedPnl >= 0 ? '+' : ''}{realizedPnl.toFixed(2)} USDT
+                                                            {realizedPnl >= 0 ? '+' : ''}{realizedPnl.toFixed(5)} USDT
+                                                        </span>
+                                                    </div>
+                                                    <div className="col">
+                                                        <span className={`${fundingFee !== 0 ? (fundingFee > 0 ? 'negative' : 'positive') : ''}`}>
+                                                            {fundingFee !== 0 ? (fundingFee > 0 ? '+' : '') + fundingFee.toFixed(2) : '0.00'} USDT
                                                         </span>
                                                     </div>
                                                     <div className="col">{fees.toFixed(2)} USDT</div>
@@ -1209,7 +1275,7 @@ function Futures() {
                                         <div className="summary-item">
                                             <span>Total P&L: </span>
                                             <span className={`pnl ${pnlHistory.reduce((sum, record) => sum + (Number(record.realizedPnl || 0)), 0) >= 0 ? 'positive' : 'negative'}`}>
-                                                {pnlHistory.reduce((sum, record) => sum + (Number(record.realizedPnl || 0)), 0).toFixed(2)} USDT
+                                                {pnlHistory.reduce((sum, record) => sum + (Number(record.realizedPnl || 0)), 0).toFixed(5)} USDT
                                             </span>
                                         </div>
                                     </div>
@@ -1217,32 +1283,33 @@ function Futures() {
                             </div>
                         )}
 
-                        {/* Add this component to your trading panel */}
+                        {/* Modified Futures Balance Panel - Removed Fund button completely */}
                         <div className="futures-balance-panel">
                             <h4>Futures Account Balance</h4>
                             <div className="balance-item">
-                                <span>Main Wallet:</span>
-                                <span>{wallets.find(w => w.name === "Futures")?.balances.find(b => b.cryptocurrency === "USDT")?.balance || "0.00"} USDT</span>
-                            </div>
-                            <div className="balance-item">
                                 <span>Trading Balance:</span>
-                                <span>{(parseFloat(futuresAvailableBalance) + parseFloat(futuresMarginBalance)).toFixed(2)} USDT</span>
+                                <span className={parseFloat(futuresAvailableBalance) === 0 && parseFloat(futuresMarginBalance) === 0 ? 'zero-balance' : ''}>
+                                    {(parseFloat(futuresAvailableBalance) + parseFloat(futuresMarginBalance)).toFixed(2)} USDT
+                                </span>
                             </div>
                             <div className="balance-item">
                                 <span>Available for Trading:</span>
-                                <span>{parseFloat(futuresAvailableBalance).toFixed(2)} USDT</span>
+                                <span className={parseFloat(futuresAvailableBalance) === 0 ? 'zero-balance' : ''}>
+                                    {parseFloat(futuresAvailableBalance).toFixed(2)} USDT
+                                </span>
                             </div>
                             <div className="balance-item">
                                 <span>In Positions:</span>
                                 <span>{parseFloat(futuresMarginBalance).toFixed(2)} USDT</span>
                             </div>
 
-                            <button
-                                className="fund-futures-btn"
-                                onClick={() => setShowFundModal(true)}
-                            >
-                                Fund Futures Account
-                            </button>
+                            {/* Modified notice - no reference to fund button */}
+                            {parseFloat(futuresAvailableBalance) === 0 && parseFloat(futuresMarginBalance) === 0 && (
+                                <div className="zero-balance-notice">
+                                    <span className="notice-icon">💡</span>
+                                    <span>Use the transfer button above to fund your futures account</span>
+                                </div>
+                            )}
                         </div>
                     </div>
 
@@ -1254,272 +1321,452 @@ function Futures() {
                 </main>
             </div>
 
-            {/* Transfer Modal */}
+            {/* Enhanced Transfer Modal with Futures Support */}
             {showTransferModal && (
                 <div className="modal-overlay">
                     <div className="transfer-modal">
                         <div className="modal-header">
-                            <h3>Transfer USDT Between Wallets</h3>
+                            <h3>
+                                {isFuturesTransfer
+                                    ? 'Transfer USDT to Futures Account'
+                                    : 'Transfer USDT Between Wallets'
+                                }
+                            </h3>
                             <button
                                 className="close-button"
                                 onClick={() => {
                                     setShowTransferModal(false);
                                     setShowConfirmation(false);
+                                    setShowFuturesTransferConfirmation(false);
                                     setTransferError('');
+                                    setIsFuturesTransfer(false);
+                                    setSelectedMainWallet('');
+                                    setTransferToFuturesAmount('');
                                 }}
                             >
                                 ×
                             </button>
                         </div>
 
-                        {!showConfirmation ? (
-                            <div className="modal-content">
-                                <div className="usdt-info">
-                                    <div className="usdt-notice">
-                                        <span className="usdt-icon">💲</span>
-                                        <span>USDT Fee-Free Transfers Only</span>
+                        {isFuturesTransfer ? (
+                            // Futures Transfer Flow
+                            !showFuturesTransferConfirmation ? (
+                                <div className="modal-content">
+                                    <div className="futures-transfer-info">
+                                        <div className="transfer-notice futures">
+                                            <span className="futures-icon">📈</span>
+                                            <span>Transfer to Futures Trading Account</span>
+                                        </div>
+                                        <p>Move USDT from your main wallet to your Futures account for trading</p>
                                     </div>
-                                    <p>Transfer USDT between your wallets with zero fees</p>
-                                </div>
 
-                                <div className="form-group">
-                                    <label>From Wallet</label>
-                                    <select
-                                        value={fromWallet}
-                                        onChange={(e) => setFromWallet(e.target.value)}
-                                        className="wallet-select"
-                                    >
-                                        <option value="">Select source wallet</option>
-                                        {wallets.filter(wallet => {
-                                            const usdtBalance = wallet.balances.find(b => b.cryptocurrency === 'USDT');
-                                            return usdtBalance && parseFloat(usdtBalance.balance) > 0;
-                                        }).map(wallet => (
-                                            <option key={wallet.wallet_id} value={wallet.wallet_id}>
-                                                {wallet.name} - {getAvailableBalance(wallet.wallet_id.toString())} USDT
-                                            </option>
-                                        ))}
-                                    </select>
-                                </div>
+                                    <div className="form-group">
+                                        <label>From Main Wallet</label>
+                                        <select
+                                            value={selectedMainWallet}
+                                            onChange={(e) => setSelectedMainWallet(e.target.value)}
+                                            className="wallet-select"
+                                        >
+                                            <option value="">Select source wallet</option>
+                                            {wallets.filter(wallet => {
+                                                // Debug logging to help identify the issue
+                                                console.log(`Checking wallet: ${wallet.name}`, {
+                                                    wallet_id: wallet.wallet_id,
+                                                    balances: wallet.balances
+                                                });
 
-                                <div className="form-group">
-                                    <label>To Wallet</label>
-                                    <select
-                                        value={toWallet}
-                                        onChange={(e) => setToWallet(e.target.value)}
-                                        className="wallet-select"
-                                    >
-                                        <option value="">Select destination wallet</option>
-                                        {wallets.filter(w => w.wallet_id.toString() !== fromWallet).map(wallet => (
-                                            <option key={wallet.wallet_id} value={wallet.wallet_id}>
-                                                {wallet.name}
-                                            </option>
-                                        ))}
-                                    </select>
-                                </div>
+                                                // Find USDT balance
+                                                const usdtBalance = wallet.balances.find(b => b.cryptocurrency === 'USDT');
 
-                                <div className="form-group">
-                                    <label>Amount (USDT)</label>
-                                    <div className="amount-input-group">
-                                        <input
-                                            type="number"
-                                            value={transferAmount}
-                                            onChange={(e) => setTransferAmount(e.target.value)}
-                                            placeholder="0.00"
-                                            step="0.01"
-                                            min="0"
-                                            className="amount-input"
-                                        />
-                                        <span className="currency-label">USDT</span>
-                                        {fromWallet && (
-                                            <button
-                                                className="max-button"
-                                                onClick={() => setTransferAmount(getAvailableBalance(fromWallet).toString())}
-                                            >
-                                                MAX
-                                            </button>
+                                                if (!usdtBalance) {
+                                                    console.log(`${wallet.name}: No USDT balance found`);
+                                                    return false;
+                                                }
+
+                                                // Parse balance more carefully
+                                                const balanceStr = usdtBalance.balance;
+                                                const balanceNum = parseFloat(balanceStr);
+
+                                                console.log(`${wallet.name}: Balance string = "${balanceStr}", Parsed = ${balanceNum}`);
+
+                                                // Check if balance is greater than 0
+                                                const hasPositiveBalance = !isNaN(balanceNum) && balanceNum > 0;
+
+                                                // More specific exclusion - only exclude actual futures trading accounts
+                                                const isFuturesTrading = (
+                                                    // Check wallet type
+                                                    (wallet.wallet_type && wallet.wallet_type.toLowerCase() === 'futures_trading') ||
+                                                    // Very specific name patterns only
+                                                    (wallet.name && wallet.name.toLowerCase() === 'futures trading account')
+                                                );
+
+                                                const shouldShow = hasPositiveBalance && !isFuturesTrading;
+
+                                                console.log(`${wallet.name}: hasPositiveBalance=${hasPositiveBalance}, isFuturesTrading=${isFuturesTrading}, shouldShow=${shouldShow}`);
+
+                                                return shouldShow;
+                                            }).map(wallet => (
+                                                <option key={wallet.wallet_id} value={wallet.wallet_id}>
+                                                    {wallet.name} - {getAvailableBalance(wallet.wallet_id.toString()).toFixed(2)} USDT
+                                                </option>
+                                            ))}
+                                        </select>
+                                    </div>
+
+                                    <div className="form-group">
+                                        <label>To Account</label>
+                                        <div className="destination-account">
+                                            <div className="account-info">
+                                                <span className="account-icon">📈</span>
+                                                <span className="account-name">Futures Trading Account</span>
+                                                <span className="account-balance">
+                                                    Current: {(parseFloat(futuresAvailableBalance) + parseFloat(futuresMarginBalance)).toFixed(2)} USDT
+                                                </span>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div className="form-group">
+                                        <label>Amount (USDT)</label>
+                                        <div className="amount-input-group enhanced">
+                                            <input
+                                                type="number"
+                                                value={transferToFuturesAmount}
+                                                onChange={(e) => setTransferToFuturesAmount(e.target.value)}
+                                                placeholder="0.00"
+                                                step="0.01"
+                                                min="0.01"
+                                                className="amount-input"
+                                            />
+                                            <span className="currency-label">USDT</span>
+                                            {selectedMainWallet && (
+                                                <button
+                                                    className="max-button"
+                                                    onClick={() => setTransferToFuturesAmount(getAvailableBalance(selectedMainWallet).toString())}
+                                                >
+                                                    MAX
+                                                </button>
+                                            )}
+                                        </div>
+                                        {selectedMainWallet && (
+                                            <div className="available-balance">
+                                                Available: {getAvailableBalance(selectedMainWallet).toFixed(2)} USDT
+                                            </div>
                                         )}
                                     </div>
-                                    {fromWallet && (
-                                        <div className="available-balance">
-                                            Available: {getAvailableBalance(fromWallet)} USDT
+
+                                    <div className="transfer-benefits">
+                                        <h4>Transfer Benefits</h4>
+                                        <ul>
+                                            <li>✅ Instant transfer to trading account</li>
+                                            <li>✅ No fees for internal transfers</li>
+                                            <li>✅ Immediate availability for futures trading</li>
+                                            <li>✅ Real-time balance updates</li>
+                                        </ul>
+                                    </div>
+
+                                    {transferError && (
+                                        <div className="error-message">
+                                            {transferError}
                                         </div>
                                     )}
-                                </div>
 
-                                <div className="fee-info">
-                                    <div className="fee-item">
-                                        <span>Transfer Fee:</span>
-                                        <span className="fee-free">FREE</span>
-                                    </div>
-                                    <div className="fee-item">
-                                        <span>Network:</span>
-                                        <span>Internal Transfer</span>
+                                    <div className="modal-actions">
+                                        <button
+                                            className="cancel-button"
+                                            onClick={() => {
+                                                setShowTransferModal(false);
+                                                setTransferError('');
+                                                setIsFuturesTransfer(false);
+                                            }}
+                                        >
+                                            Cancel
+                                        </button>
+                                        <button
+                                            className="continue-button futures"
+                                            onClick={() => {
+                                                if (validateFuturesTransfer()) {
+                                                    setShowFuturesTransferConfirmation(true);
+                                                }
+                                            }}
+                                            disabled={!selectedMainWallet || !transferToFuturesAmount}
+                                        >
+                                            Continue to Futures
+                                        </button>
                                     </div>
                                 </div>
+                            ) : (
+                                // Futures Transfer Confirmation
+                                <div className="confirmation-content">
+                                    <div className="confirmation-details">
+                                        <h4>Confirm Futures Transfer</h4>
+                                        <div className="transfer-summary futures">
+                                            <div className="summary-header">
+                                                <span className="transfer-icon">📈</span>
+                                                <span>Futures Account Transfer</span>
+                                            </div>
+                                            <div className="summary-item">
+                                                <span>From:</span>
+                                                <span>{wallets.find(w => w.wallet_id.toString() === selectedMainWallet)?.name}</span>
+                                            </div>
+                                            <div className="summary-item">
+                                                <span>To:</span>
+                                                <span className="futures-destination">Futures Trading Account</span>
+                                            </div>
+                                            <div className="summary-item highlight">
+                                                <span>Amount:</span>
+                                                <span className="amount-highlight">{transferToFuturesAmount} USDT</span>
+                                            </div>
+                                            <div className="summary-item">
+                                                <span>Transfer Fee:</span>
+                                                <span className="fee-free">FREE</span>
+                                            </div>
+                                            <div className="summary-item">
+                                                <span>Processing Time:</span>
+                                                <span>Instant</span>
+                                            </div>
+                                        </div>
 
-                                {transferError && (
-                                    <div className="error-message">
-                                        {transferError}
+                                        <div className="balance-preview">
+                                            <h5>After Transfer:</h5>
+                                            <div className="balance-change">
+                                                <span>Main Wallet:</span>
+                                                <span>
+                                                    {(getAvailableBalance(selectedMainWallet) - parseFloat(transferToFuturesAmount || 0)).toFixed(2)} USDT
+                                                    <small className="change-indicator">
+                                                        (-{parseFloat(transferToFuturesAmount || 0).toFixed(2)})
+                                                    </small>
+                                                </span>
+                                            </div>
+                                            <div className="balance-change">
+                                                <span>Futures Account:</span>
+                                                <span>
+                                                    {(parseFloat(futuresAvailableBalance) + parseFloat(futuresMarginBalance) + parseFloat(transferToFuturesAmount || 0)).toFixed(2)} USDT
+                                                    <small className="change-indicator positive">
+                                                        (+{parseFloat(transferToFuturesAmount || 0).toFixed(2)})
+                                                    </small>
+                                                </span>
+                                            </div>
+                                        </div>
                                     </div>
-                                )}
 
-                                <div className="modal-actions">
-                                    <button
-                                        className="cancel-button"
-                                        onClick={() => {
-                                            setShowTransferModal(false);
-                                            setTransferError('');
-                                        }}
-                                    >
-                                        Cancel
-                                    </button>
-                                    <button
-                                        className="continue-button"
-                                        onClick={() => {
-                                            if (validateTransfer()) {
-                                                setShowConfirmation(true);
-                                            }
-                                        }}
-                                    >
-                                        Continue
-                                    </button>
+                                    {transferError && (
+                                        <div className="error-message">
+                                            {transferError}
+                                        </div>
+                                    )}
+
+                                    <div className="modal-actions">
+                                        <button
+                                            className="back-button"
+                                            onClick={() => setShowFuturesTransferConfirmation(false)}
+                                            disabled={isTransferring}
+                                        >
+                                            Back
+                                        </button>
+                                        <button
+                                            className="confirm-button futures"
+                                            onClick={handleFuturesTransfer}
+                                            disabled={isTransferring}
+                                        >
+                                            {isTransferring ? (
+                                                <>
+                                                    <span className="loading-spinner">⟳</span>
+                                                    Processing Transfer...
+                                                </>
+                                            ) : (
+                                                <>
+                                                    <span className="confirm-icon">✅</span>
+                                                    Confirm Transfer
+                                                </>
+                                            )}
+                                        </button>
+                                    </div>
                                 </div>
-                            </div>
+                            )
                         ) : (
-                            <div className="confirmation-content">
-                                <div className="confirmation-details">
-                                    <h4>Confirm USDT Transfer</h4>
-                                    <div className="transfer-summary">
-                                        <div className="summary-item">
-                                            <span>From:</span>
-                                            <span>{wallets.find(w => w.wallet_id.toString() === fromWallet)?.name}</span>
+                            // Original wallet-to-wallet transfer flow remains unchanged
+                            !showConfirmation ? (
+                                <div className="modal-content">
+                                    {/* Existing wallet-to-wallet transfer content */}
+                                    <div className="usdt-info">
+                                        <div className="usdt-notice">
+                                            <span className="usdt-icon">💲</span>
+                                            <span>USDT Fee-Free Transfers Only</span>
                                         </div>
-                                        <div className="summary-item">
-                                            <span>To:</span>
-                                            <span>{wallets.find(w => w.wallet_id.toString() === toWallet)?.name}</span>
+                                        <p>Transfer USDT between your wallets with zero fees</p>
+                                    </div>
+
+                                    <div className="form-group">
+                                        <label>From Wallet</label>
+                                        <select
+                                            value={fromWallet}
+                                            onChange={(e) => setFromWallet(e.target.value)}
+                                            className="wallet-select"
+                                        >
+                                            <option value="">Select source wallet</option>
+                                            {wallets.filter(wallet => {
+                                                // Apply the same improved filtering logic for regular transfers
+                                                const usdtBalance = wallet.balances.find(b => b.cryptocurrency === 'USDT');
+
+                                                if (!usdtBalance) return false;
+
+                                                const balanceNum = parseFloat(usdtBalance.balance);
+                                                const hasPositiveBalance = !isNaN(balanceNum) && balanceNum > 0;
+
+                                                // Only exclude actual futures trading accounts
+                                                const isFuturesTrading = (
+                                                    (wallet.wallet_type && wallet.wallet_type.toLowerCase() === 'futures_trading') ||
+                                                    (wallet.name && wallet.name.toLowerCase() === 'futures trading account')
+                                                );
+
+                                                return hasPositiveBalance && !isFuturesTrading;
+                                            }).map(wallet => (
+                                                <option key={wallet.wallet_id} value={wallet.wallet_id}>
+                                                    {wallet.name} - {getAvailableBalance(wallet.wallet_id.toString()).toFixed(2)} USDT
+                                                </option>
+                                            ))}
+                                        </select>
+                                    </div>
+
+                                    <div className="form-group">
+                                        <label>To Wallet</label>
+                                        <select
+                                            value={toWallet}
+                                            onChange={(e) => setToWallet(e.target.value)}
+                                            className="wallet-select"
+                                        >
+                                            <option value="">Select destination wallet</option>
+                                            {wallets.filter(w => w.wallet_id.toString() !== fromWallet).map(wallet => (
+                                                <option key={wallet.wallet_id} value={wallet.wallet_id}>
+                                                    {wallet.name}
+                                                </option>
+                                            ))}
+                                        </select>
+                                    </div>
+
+                                    <div className="form-group">
+                                        <label>Amount (USDT)</label>
+                                        <div className="amount-input-group">
+                                            <input
+                                                type="number"
+                                                value={transferAmount}
+                                                onChange={(e) => setTransferAmount(e.target.value)}
+                                                placeholder="0.00"
+                                                step="0.01"
+                                                min="0"
+                                                className="amount-input"
+                                            />
+                                            <span className="currency-label">USDT</span>
+                                            {fromWallet && (
+                                                <button
+                                                    className="max-button"
+                                                    onClick={() => setTransferAmount(getAvailableBalance(fromWallet).toString())}
+                                                >
+                                                    MAX
+                                                </button>
+                                            )}
                                         </div>
-                                        <div className="summary-item">
-                                            <span>Amount:</span>
-                                            <span>{transferAmount} USDT</span>
-                                        </div>
-                                        <div className="summary-item">
-                                            <span>Fee:</span>
+                                        {fromWallet && (
+                                            <div className="available-balance">
+                                                Available: {getAvailableBalance(fromWallet)} USDT
+                                            </div>
+                                        )}
+                                    </div>
+
+                                    <div className="fee-info">
+                                        <div className="fee-item">
+                                            <span>Transfer Fee:</span>
                                             <span className="fee-free">FREE</span>
                                         </div>
-                                        <div className="summary-item">
-                                            <span>You'll Receive:</span>
-                                            <span className="receive-amount">{transferAmount} USDT</span>
+                                        <div className="fee-item">
+                                            <span>Network:</span>
+                                            <span>Internal Transfer</span>
                                         </div>
                                     </div>
-                                </div>
 
-                                {transferError && (
-                                    <div className="error-message">
-                                        {transferError}
+                                    {transferError && (
+                                        <div className="error-message">
+                                            {transferError}
+                                        </div>
+                                    )}
+
+                                    <div className="modal-actions">
+                                        <button
+                                            className="cancel-button"
+                                            onClick={() => {
+                                                setShowTransferModal(false);
+                                                setTransferError('');
+                                            }}
+                                        >
+                                            Cancel
+                                        </button>
+                                        <button
+                                            className="continue-button"
+                                            onClick={() => {
+                                                if (validateTransfer()) {
+                                                    setShowConfirmation(true);
+                                                }
+                                            }}
+                                        >
+                                            Continue
+                                        </button>
                                     </div>
-                                )}
-
-                                <div className="modal-actions">
-                                    <button
-                                        className="back-button"
-                                        onClick={() => setShowConfirmation(false)}
-                                        disabled={isTransferring}
-                                    >
-                                        Back
-                                    </button>
-                                    <button
-                                        className="confirm-button"
-                                        onClick={handleTransfer}
-                                        disabled={isTransferring}
-                                    >
-                                        {isTransferring ? 'Processing...' : 'Confirm USDT Transfer'}
-                                    </button>
                                 </div>
-                            </div>
+                            ) : (
+                                /* Existing confirmation content for wallet-to-wallet transfers */
+                                <div className="confirmation-content">
+                                    <div className="confirmation-details">
+                                        <h4>Confirm USDT Transfer</h4>
+                                        <div className="transfer-summary">
+                                            <div className="summary-item">
+                                                <span>From:</span>
+                                                <span>{wallets.find(w => w.wallet_id.toString() === fromWallet)?.name}</span>
+                                            </div>
+                                            <div className="summary-item">
+                                                <span>To:</span>
+                                                <span>{wallets.find(w => w.wallet_id.toString() === toWallet)?.name}</span>
+                                            </div>
+                                            <div className="summary-item">
+                                                <span>Amount:</span>
+                                                <span>{transferAmount} USDT</span>
+                                            </div>
+                                            <div className="summary-item">
+                                                <span>Fee:</span>
+                                                <span className="fee-free">FREE</span>
+                                            </div>
+                                            <div className="summary-item">
+                                                <span>You'll Receive:</span>
+                                                <span className="receive-amount">{transferAmount} USDT</span>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    {transferError && (
+                                        <div className="error-message">
+                                            {transferError}
+                                        </div>
+                                    )}
+
+                                    <div className="modal-actions">
+                                        <button
+                                            className="back-button"
+                                            onClick={() => setShowConfirmation(false)}
+                                            disabled={isTransferring}
+                                        >
+                                            Back
+                                        </button>
+                                        <button
+                                            className="confirm-button"
+                                            onClick={handleTransfer}
+                                            disabled={isTransferring}
+                                        >
+                                            {isTransferring ? 'Processing...' : 'Confirm USDT Transfer'}
+                                        </button>
+                                    </div>
+                                </div>
+                            )
                         )}
-                    </div>
-                </div>
-            )}
-
-            {/* Fund Futures Account Modal */}
-            {showFundModal && (
-                <div className="fund-futures-modal">
-                    <div className="fund-futures-dialog">
-                        <div className="fund-futures-header">
-                            <h3>Fund Futures Account</h3>
-                            <button
-                                className="fund-futures-close"
-                                onClick={() => {
-                                    setShowFundModal(false);
-                                    setFundAmount('');
-                                    setFundError('');
-                                }}
-                            >
-                                ×
-                            </button>
-                        </div>
-
-                        <div className="fund-futures-content">
-                            <div className="fund-info-section">
-                                <div className="fund-info-title">
-                                    Transfer to Trading Account
-                                </div>
-                                <p className="fund-info-description">
-                                    Transfer USDT from your Futures wallet to your active trading account.
-                                    This will make the funds immediately available for futures trading.
-                                </p>
-                            </div>
-
-                            <div className="amount-input-section">
-                                <label>Amount to Transfer</label>
-                                <div className="enhanced-amount-input-group">
-                                    <input
-                                        type="number"
-                                        value={fundAmount}
-                                        onChange={(e) => setFundAmount(e.target.value)}
-                                        placeholder="0.00"
-                                        step="0.01"
-                                        min="0"
-                                        className="enhanced-amount-input"
-                                    />
-                                    <span className="enhanced-currency-label">USDT</span>
-                                </div>
-
-                                <div className="balance-display">
-                                    <span>Available in Futures Wallet:</span>
-                                    <span>
-                                        {wallets.find(w => w.name === "Futures")?.balances.find(b => b.cryptocurrency === "USDT")?.balance || "0.00"} USDT
-                                    </span>
-                                </div>
-                            </div>
-
-                            {fundError && (
-                                <div className="fund-error-message">
-                                    {fundError}
-                                </div>
-                            )}
-
-                            <div className="fund-futures-actions">
-                                <button
-                                    className="fund-cancel-btn"
-                                    onClick={() => {
-                                        setShowFundModal(false);
-                                        setFundAmount('');
-                                        setFundError('');
-                                    }}
-                                    disabled={isFunding}
-                                >
-                                    Cancel
-                                </button>
-                                <button
-                                    className={`fund-confirm-btn ${isFunding ? 'loading' : ''}`}
-                                    onClick={transferToFuturesAccount}
-                                    disabled={isFunding || !fundAmount}
-                                >
-                                    {isFunding ? 'Processing...' : 'Confirm Transfer'}
-                                </button>
-                            </div>
-                        </div>
                     </div>
                 </div>
             )}

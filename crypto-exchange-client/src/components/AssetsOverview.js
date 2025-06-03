@@ -256,6 +256,16 @@ function AssetsOverview() {
         return <div className="loading-container">Loading your assets overview...</div>;
     }
 
+    // Enhanced navigation with state
+    const handleCreateWallet = () => {
+        navigate('/assets', {
+            state: {
+                openWalletCreation: true,
+                source: 'assets-overview'
+            }
+        });
+    };
+
     return (
         <div className="dashboard-container">
             <header className="dashboard-header">
@@ -436,7 +446,7 @@ function AssetsOverview() {
                             <div className="create-wallet-section">
                                 <button
                                     className="create-wallet-button-large"
-                                    onClick={() => navigate('/assets')}
+                                    onClick={handleCreateWallet}
                                 >
                                     Create New Wallet
                                 </button>

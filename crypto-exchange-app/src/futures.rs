@@ -619,22 +619,29 @@ pub async fn fund_futures_account(
         .get()
         .map_err(|_| actix_web::error::ErrorInternalServerError("Database connection error"))?;
 
-    // Execute transaction
+    // Execute transaction - FIXED: Use proper diesel column imports
     let result = web::block(move || -> Result<FuturesBalance, diesel::result::Error> {
         conn.transaction(|conn| {
-            // 1. Subtract from wallet_balances
+            // 1. Get and validate wallet balance - ensure it belongs to the user
             let wallet_balance = {
                 use crate::schema::wallet_balances::dsl::*;
+                use crate::schema::wallets::dsl::{user_id as wallet_user_id, wallets};
+
                 wallet_balances
-                    .filter(wallet_id.eq(fund_req.wallet_id as i64)) // Cast to i64
+                    .inner_join(wallets.on(wallet_id.eq(crate::schema::wallets::wallet_id)))
+                    .filter(wallet_user_id.eq(user_id))
+                    .filter(wallet_id.eq(fund_req.wallet_id as i64))
                     .filter(cryptocurrency.eq("USDT"))
+                    .select(wallet_balances::all_columns())
                     .first::<WalletBalance>(conn)?
             };
 
+            // 2. Validate sufficient balance
             if wallet_balance.balance < amount {
                 return Err(diesel::result::Error::RollbackTransaction);
             }
 
+            // 3. Update wallet balance (subtract the amount)
             diesel::update(wallet_balances::table)
                 .filter(wallet_balances::id.eq(wallet_balance.id))
                 .set((
@@ -643,7 +650,7 @@ pub async fn fund_futures_account(
                 ))
                 .execute(conn)?;
 
-            // 2. Add to futures_balances
+            // 4. Update or create futures balance (add the amount)
             let futures_balance = futures_balances::table
                 .filter(futures_balances::user_id.eq(user_id))
                 .filter(futures_balances::currency.eq("USDT"))
@@ -683,19 +690,17 @@ pub async fn fund_futures_account(
     .map_err(|_| actix_web::error::ErrorInternalServerError("Error processing transfer"))?;
 
     match result {
-        Ok(updated_balance) => {
-            Ok(HttpResponse::Ok().json(serde_json::json!({
-                "message": "Futures account funded successfully",
+        Ok(updated_balance) => Ok(HttpResponse::Ok().json(serde_json::json!({
+            "message": "Funds transferred successfully",
+            "futures_balance": {
                 "available_balance": updated_balance.available_balance.to_string(),
                 "margin_balance": updated_balance.margin_balance.to_string(),
-                "total_balance": (&updated_balance.available_balance + &updated_balance.margin_balance).to_string()
-            })))
-        },
-        Err(_) => {
-            Ok(HttpResponse::BadRequest().json(serde_json::json!({
-                "error": "Insufficient balance for transfer"
-            })))
-        }
+                "unrealized_pnl": updated_balance.unrealized_pnl.to_string(),
+            }
+        }))),
+        Err(_) => Ok(HttpResponse::BadRequest().json(serde_json::json!({
+            "error": "Insufficient balance or transfer failed"
+        }))),
     }
 }
 
@@ -730,13 +735,24 @@ fn get_user_futures_balance(
     match existing_balance {
         Some(balance) => Ok(balance),
         None => {
-            // Create initial balance from spot wallet
-            let spot_balance = get_total_spot_balance(conn, _user_id, _currency)?;
+            // FIXED: Verify user exists before creating balance record
+            use crate::schema::users::dsl as users_dsl;
 
+            // Check if user exists first
+            let user_exists = users_dsl::users
+                .filter(users_dsl::id.eq(_user_id))
+                .first::<crate::models::User>(conn)
+                .optional()?;
+
+            if user_exists.is_none() {
+                return Err(diesel::result::Error::NotFound);
+            }
+
+            // Create initial balance with 0 USDT
             let new_balance = NewFuturesBalance {
                 user_id: _user_id,
                 currency: _currency.to_string(),
-                available_balance: spot_balance,
+                available_balance: BigDecimal::from(0),
                 margin_balance: BigDecimal::from(0),
                 unrealized_pnl: BigDecimal::from(0),
             };
@@ -746,21 +762,6 @@ fn get_user_futures_balance(
                 .get_result(conn)
         }
     }
-}
-
-fn get_total_spot_balance(
-    conn: &mut PgConnection,
-    _user_id: i32,
-    _currency: &str,
-) -> Result<BigDecimal, diesel::result::Error> {
-    let total_balance: Option<BigDecimal> = wallets::table
-        .inner_join(wallet_balances::table)
-        .filter(wallets::user_id.eq(_user_id))
-        .filter(wallet_balances::cryptocurrency.eq(_currency))
-        .select(diesel::dsl::sum(wallet_balances::balance))
-        .first(conn)?;
-
-    Ok(total_balance.unwrap_or(BigDecimal::from(0)))
 }
 
 fn update_user_balance_for_margin(

@@ -173,6 +173,22 @@
     text-align: right;
 }
 
+/* Override global .chart-wrapper so our pie chart shrinks */
+.portfolio-chart-container .chart-wrapper {
+    height: 300px;
+    /* shrink to 200px */
+    min-height: 0;
+    /* override any min-height */
+    margin-bottom: 12px;
+    /* tighten spacing */
+}
+
+/* also shrink the loading/empty states inside this container */
+.portfolio-chart-container .portfolio-chart-loading,
+.portfolio-chart-container .portfolio-chart-empty {
+    height: 180px;
+}
+
 /* Responsive adjustments */
 @media (max-width: 768px) {
     .chart-wrapper {

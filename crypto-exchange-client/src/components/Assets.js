@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { useNavigate, Link, useLocation } from 'react-router-dom';
 import './Assets.css';
 import { createSynchronizedInterval, clearSynchronizedInterval } from '../utils/refreshUtils';
 import RefreshIndicator from './RefreshIndicator';
@@ -7,6 +7,8 @@ import SearchBox from './SearchBox/SearchBox';
 
 function Assets() {
     const navigate = useNavigate();
+    const location = useLocation();
+
     const [userData, setUserData] = useState(null);
     const [isLoading, setIsLoading] = useState(true);
     const [apiError, setApiError] = useState('');
@@ -352,8 +354,6 @@ function Assets() {
         const fetchUserData = async () => {
             try {
                 const token = localStorage.getItem('auth_token');
-
-                // Redirect to login if no token
                 if (!token) {
                     navigate('/login');
                     return;
@@ -410,6 +410,14 @@ function Assets() {
                 // Fetch available cryptocurrencies
                 await fetchAvailableCryptocurrencies(token);
 
+                // Check if we should auto-open wallet creation from router state
+                if (location.state?.openWalletCreation) {
+                    setShowWalletCreation(true);
+
+                    // Clear the state to prevent reopening on refresh
+                    window.history.replaceState({}, '', '/assets');
+                }
+
             } catch (error) {
                 console.error('Error in assets data fetching:', error);
                 setApiError('Could not load your asset information. Please try again later.');
@@ -443,7 +451,7 @@ function Assets() {
 
         // Clean up interval on component unmount
         return () => clearSynchronizedInterval(syncedInterval);
-    }, [navigate]);
+    }, [navigate, location.state]);
 
     // Example of how to update Assets.js later (not part of current task)
     useEffect(() => {

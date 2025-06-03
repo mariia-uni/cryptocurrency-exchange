@@ -19,7 +19,7 @@ const PortfolioChart = ({ token, refresh }) => {
     const [lastUpdate, setLastUpdate] = useState(null);
     const intervalRef = useRef(null);
 
-    // Move helper functions outside of useEffect or use useCallback
+    // Move helper functions outside of useEffect or useCallback
     const getSampleData = useCallback(() => [
         { cryptocurrency: 'BTC', percentage: 35, usd_value: 18500, balance: 0.35, color: '#F7931A' },
         { cryptocurrency: 'ETH', percentage: 25, usd_value: 13200, balance: 4.2, color: '#627EEA' },
@@ -71,6 +71,7 @@ const PortfolioChart = ({ token, refresh }) => {
 
     const fetchPortfolioData = useCallback(async () => {
         if (!token) {
+            // Only show sample data for demo/unauthenticated users
             setPortfolioData(getSampleData());
             setIsLoading(false);
             return;
@@ -94,14 +95,14 @@ const PortfolioChart = ({ token, refresh }) => {
                 processPortfolioData(data);
                 setLastUpdate(new Date());
             } else {
-                // No real portfolio data, use sample data
-                setPortfolioData(getSampleData());
+                // FIXED: Show empty state for authenticated users with no data
+                setPortfolioData([]);  // Empty array instead of sample data
             }
 
         } catch (err) {
             console.error('Error fetching portfolio data:', err);
-            // Use sample data as fallback
-            setPortfolioData(getSampleData());
+            // FIXED: Show empty state instead of sample data for authenticated users
+            setPortfolioData([]);
         } finally {
             setIsLoading(false);
         }

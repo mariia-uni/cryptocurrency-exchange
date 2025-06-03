@@ -98,6 +98,11 @@ function Deposit() {
                         setWallets(data.wallets);
                         if (data.wallets.length > 0) {
                             setSelectedWallet(data.wallets[0]);
+                        } else {
+                            // IMMEDIATE REDIRECTION: No delay, direct navigation
+                            console.log('No wallets found - redirecting immediately to wallet creation');
+                            navigate('/assets');
+                            return; // Exit early to prevent further rendering
                         }
                     }
                 } else {

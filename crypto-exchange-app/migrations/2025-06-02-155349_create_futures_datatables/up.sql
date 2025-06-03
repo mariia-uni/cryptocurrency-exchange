@@ -77,3 +77,14 @@ END;
 $$ language 'plpgsql';
 CREATE TRIGGER update_futures_positions_updated_at BEFORE
 UPDATE ON futures_positions FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+-- Add a function to initialize futures balance at 0 USDT
+CREATE OR REPLACE FUNCTION initialize_futures_balance() RETURNS TRIGGER AS $$ BEGIN -- Ensure new futures balance records start with 0
+    NEW.available_balance := COALESCE(NEW.available_balance, 0);
+NEW.margin_balance := COALESCE(NEW.margin_balance, 0);
+NEW.unrealized_pnl := COALESCE(NEW.unrealized_pnl, 0);
+RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+-- Create trigger to apply the function
+CREATE TRIGGER set_default_futures_balance BEFORE
+INSERT ON futures_balances FOR EACH ROW EXECUTE FUNCTION initialize_futures_balance();
