@@ -229,7 +229,7 @@ const PortfolioChart = ({ token, refresh }) => {
                     <h4>No Portfolio Data</h4>
                     <p>Start investing to see your portfolio distribution</p>
                     <button
-                        className="get-started-btn"
+                        className="get-started-button"
                         onClick={() => window.location.href = '/deposit'}
                     >
                         Get Started
