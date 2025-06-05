@@ -1116,10 +1116,6 @@ function Withdrawal() {
                             <span className="nav-icon">👤</span>
                             <span className="nav-text">Account Settings</span>
                         </li>
-                        <li className="nav-item">
-                            <span className="nav-icon">⚙️</span>
-                            <span className="nav-text">System Settings</span>
-                        </li>
                     </ul>
                 </nav>
 

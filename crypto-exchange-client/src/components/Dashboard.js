@@ -11,7 +11,8 @@ function Dashboard() {
     const [isLoading, setIsLoading] = useState(true);
     const [apiError, setApiError] = useState('');
     const [isAdmin, setIsAdmin] = useState(false);
-    const [portfolioRefresh] = useState(0); // Remove setPortfolioRefresh since it's never used
+    const [portfolioRefresh] = useState(0);
+    const [hasDeposited, setHasDeposited] = useState(false);
 
     // Enhanced function to get proper display name from user data
     const getDisplayName = (user) => {
@@ -51,8 +52,7 @@ function Dashboard() {
         navigate('/admin');
     };
 
-
-
+    // First useEffect to fetch user data
     useEffect(() => {
         const fetchUserData = async () => {
             try {
@@ -176,12 +176,9 @@ function Dashboard() {
         return () => { };
     }, [navigate]);
 
-    if (isLoading) {
-        return <div className="loading-container">Loading your dashboard...</div>;
-    }
-
-    // Determine which steps are completed
-    const hasAccount = !!userData; // User is logged in, so account exists
+    // MOVED: Define verification status variables before using them in the useEffect
+    // These need to be inside the component but before the useEffect that uses isVerified
+    const hasAccount = !isLoading && !!userData; // User is logged in, so account exists
     const hasPersonalInfo = !!(verificationStatus && verificationStatus.verification);
     const hasIdDocument = !!(hasPersonalInfo &&
         verificationStatus.verification.id_document &&
@@ -189,9 +186,46 @@ function Dashboard() {
     const isVerified = !!(hasIdDocument &&
         verificationStatus.verification.id_document.id_verification_status === 'approved');
 
-    // Assume deposit status - this would come from an API in a real application
-    // For now, we'll just simulate it's not done
-    const hasDeposited = false;
+    // NOW this useEffect can reference isVerified as it's defined above
+    useEffect(() => {
+        const checkDepositStatus = async () => {
+            try {
+                const token = localStorage.getItem('auth_token');
+
+                if (!token) return;
+
+                const response = await fetch('http://localhost:8080/wallet/list', {
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'Content-Type': 'application/json',
+                    },
+                });
+
+                if (response.ok) {
+                    const data = await response.json();
+                    if (data.wallets && Array.isArray(data.wallets)) {
+                        // Check if any wallet has any cryptocurrency with balance > 0
+                        const hasBalance = data.wallets.some(wallet =>
+                            wallet.balances && wallet.balances.some(balance =>
+                                parseFloat(balance.balance) > 0
+                            )
+                        );
+                        setHasDeposited(hasBalance);
+                    }
+                }
+            } catch (error) {
+                console.error('Error checking deposit status:', error);
+            }
+        };
+
+        if (isVerified) {
+            checkDepositStatus();
+        }
+    }, [isVerified]); // This dependency is now properly defined before use
+
+    if (isLoading) {
+        return <div className="loading-container">Loading your dashboard...</div>;
+    }
 
     const renderVerificationBanner = () => {
         // Don't show any verification banner if the user has already submitted both personal info and ID document
@@ -244,8 +278,6 @@ function Dashboard() {
 
         return null;
     };
-
-
 
     return (
         <div className="dashboard-container">
@@ -314,26 +346,26 @@ function Dashboard() {
                         <li className="nav-item" onClick={() => navigate('/futures')}>
                             <span className="nav-icon">📈</span>
                             <span className="nav-text">Futures</span>
+                            {!isVerified && <span className="verification-required-badge">Verification Required</span>}
                         </li>
                         <li className="nav-item" onClick={() => navigate('/assets-overview')}>
                             <span className="nav-icon">💎</span>
                             <span className="nav-text">Assets</span>
+                            {!isVerified && <span className="verification-required-badge">Verification Required</span>}
                         </li>
                         <li className="nav-item" onClick={() => navigate('/deposit')}>
                             <span className="nav-icon">💰</span>
                             <span className="nav-text">Deposit</span>
+                            {!isVerified && <span className="verification-required-badge">Verification Required</span>}
                         </li>
                         <li className="nav-item" onClick={() => navigate('/withdrawal')}>
                             <span className="nav-icon">💸</span>
                             <span className="nav-text">Withdrawal</span>
+                            {!isVerified && <span className="verification-required-badge">Verification Required</span>}
                         </li>
                         <li className="nav-item" onClick={() => navigate('/settings')}>
                             <span className="nav-icon">👤</span>
                             <span className="nav-text">Account Settings</span>
-                        </li>
-                        <li className="nav-item">
-                            <span className="nav-icon">⚙️</span>
-                            <span className="nav-text">System Settings</span>
                         </li>
                     </ul>
                 </nav>
@@ -481,8 +513,20 @@ function Dashboard() {
                                 </div>
                                 <h4>Start Trading</h4>
                                 <p>Kick off your journey with your favorite Spot pairs or Futures contracts!</p>
-                                <button className="step-button" disabled={!hasDeposited && !isVerified}>
-                                    {isVerified && hasDeposited ? "Trade Now" : "Deposit Required"}
+                                <button
+                                    className="step-button"
+                                    disabled={!isVerified}
+                                    onClick={() => {
+                                        if (isVerified) {
+                                            if (hasDeposited) {
+                                                navigate('/futures');
+                                            } else {
+                                                navigate('/deposit');
+                                            }
+                                        }
+                                    }}
+                                >
+                                    {isVerified ? (hasDeposited ? "Trade Now" : "Make a Deposit") : "Verification Required"}
                                 </button>
                             </div>
                         </div>

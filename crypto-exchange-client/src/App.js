@@ -20,6 +20,8 @@ import AssetsOverview from './components/AssetsOverview';
 import Deposit from './components/Deposit';
 import Withdrawal from './components/Withdrawal';
 import Futures from './components/Futures';
+import VerificationRequired from './components/VerificationRequired';
+import VerifiedRoute from './components/VerifiedRoute';
 import './App.css';
 
 const ProtectedRoute = ({ children }) => {
@@ -60,24 +62,32 @@ function App() {
         <Route path="/document-upload" element={<ProtectedRoute><DocumentUpload /></ProtectedRoute>} />
         <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
         <Route path="/markets" element={<Markets />} />
-        <Route path="/futures" element={<ProtectedRoute><Futures /></ProtectedRoute>} />
-        <Route path="/assets" element={<ProtectedRoute><Assets /></ProtectedRoute>} />
-        <Route path="/assets-overview" element={<AssetsOverview />} />
+        <Route path="/verify-required" element={<ProtectedRoute><VerificationRequired /></ProtectedRoute>} />
+
+        {/* Financial pages requiring verification */}
+        <Route path="/futures" element={<VerifiedRoute><Futures /></VerifiedRoute>} />
+        <Route path="/assets" element={<VerifiedRoute><Assets /></VerifiedRoute>} />
+        <Route path="/assets-overview" element={<VerifiedRoute><AssetsOverview /></VerifiedRoute>} />
+        <Route path="/deposit" element={<VerifiedRoute><Deposit /></VerifiedRoute>} />
+        <Route path="/withdrawal" element={<VerifiedRoute><Withdrawal /></VerifiedRoute>} />
+
         <Route path="/settings" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
         <Route path="/reset-password" element={<ResetPassword />} />
-        <Route path="/deposit" element={<Deposit />} />
-        <Route path="/withdrawal" element={<Withdrawal />} />
 
         {/* Admin routes */}
-        <Route path="/admin" element={<AdminRoute><AdminPanel /></AdminRoute>} />
-        <Route path="/admin/queue" element={<AdminRoute><VerificationQueue /></AdminRoute>} />
-        <Route path="/admin/users" element={<AdminRoute><UserManagement /></AdminRoute>} />
+        <Route path="/admin" element={<ProtectedRoute><AdminPanel /></ProtectedRoute>} />
+        <Route path="/admin/verification-queue" element={<ProtectedRoute><VerificationQueue /></ProtectedRoute>} />
+        <Route path="/admin/queue" element={<ProtectedRoute><VerificationQueue /></ProtectedRoute>} />
+        <Route path="/admin/users" element={<ProtectedRoute><UserManagement /></ProtectedRoute>} />
 
+        {/* Public routes */}
         <Route path="/about" element={<About />} />
         <Route path="/terms" element={<Terms />} />
         <Route path="/privacy" element={<Privacy />} />
         <Route path="/support" element={<Support />} />
-        <Route path="/" element={<Navigate to="/dashboard" replace />} />
+
+        {/* Default route */}
+        <Route path="/" element={<Navigate to="/dashboard" />} />
         <Route path="*" element={<Navigate to="/dashboard" replace />} />
       </Routes>
     </Router>

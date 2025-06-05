@@ -12,6 +12,8 @@ function Settings() {
     const [isPasswordResetRequested, setIsPasswordResetRequested] = useState(false);
     const [email, setEmail] = useState('');
     const [isAdmin, setIsAdmin] = useState(false);
+    // We'll directly update isVerified based on API response
+    const [isVerified, setIsVerified] = useState(false);
 
     // Enhanced function to get proper display name from user data - matching Dashboard.js
     const getDisplayName = (user) => {
@@ -115,6 +117,34 @@ function Settings() {
                     console.warn("API error when fetching user data:", userApiError);
                     // Continue with fallback data
                 }
+
+                // Add this block to fetch verification status
+                try {
+                    const verificationResponse = await fetch('http://localhost:8080/verify/status', {
+                        method: 'GET',
+                        headers: {
+                            'Authorization': `Bearer ${token}`,
+                            'Content-Type': 'application/json',
+                        },
+                    });
+
+                    if (verificationResponse.ok) {
+                        const verificationData = await verificationResponse.json();
+
+                        // Check if user is verified
+                        const hasPersonalInfo = !!(verificationData && verificationData.verification);
+                        const hasIdDocument = !!(hasPersonalInfo &&
+                            verificationData.verification.id_document &&
+                            verificationData.verification.id_document.id_verification_status !== 'rejected');
+                        const userVerified = !!(hasIdDocument &&
+                            verificationData.verification.id_document.id_verification_status === 'approved');
+
+                        setIsVerified(userVerified);
+                    }
+                } catch (verificationError) {
+                    console.warn("API error when fetching verification status:", verificationError);
+                }
+
             } catch (error) {
                 console.error('Error fetching user data:', error);
                 setApiError('Server connection error. Please try again later.');
@@ -226,26 +256,26 @@ function Settings() {
                         <li className="nav-item" onClick={() => navigate('/futures')}>
                             <span className="nav-icon">📈</span>
                             <span className="nav-text">Futures</span>
+                            {!isVerified && <span className="verification-required-badge">Verification Required</span>}
                         </li>
                         <li className="nav-item" onClick={() => navigate('/assets-overview')}>
                             <span className="nav-icon">💎</span>
                             <span className="nav-text">Assets</span>
+                            {!isVerified && <span className="verification-required-badge">Verification Required</span>}
                         </li>
                         <li className="nav-item" onClick={() => navigate('/deposit')}>
                             <span className="nav-icon">💰</span>
                             <span className="nav-text">Deposit</span>
+                            {!isVerified && <span className="verification-required-badge">Verification Required</span>}
                         </li>
                         <li className="nav-item" onClick={() => navigate('/withdrawal')}>
                             <span className="nav-icon">💸</span>
                             <span className="nav-text">Withdrawal</span>
+                            {!isVerified && <span className="verification-required-badge">Verification Required</span>}
                         </li>
                         <li className="nav-item active">
                             <span className="nav-icon">👤</span>
                             <span className="nav-text">Account Settings</span>
-                        </li>
-                        <li className="nav-item">
-                            <span className="nav-icon">⚙️</span>
-                            <span className="nav-text">System Settings</span>
                         </li>
                     </ul>
                 </nav>

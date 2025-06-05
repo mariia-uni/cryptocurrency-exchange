@@ -1,0 +1,107 @@
+.verification-required-container {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 100vh;
+    background-color: #131722;
+    padding: 20px;
+}
+
+.verification-required-card {
+    background-color: #1a1f2a;
+    border-radius: 10px;
+    padding: 40px;
+    max-width: 600px;
+    width: 100%;
+    box-shadow: 0 8px 16px rgba(0, 0, 0, 0.2);
+    border: 1px solid #2e3444;
+    text-align: center;
+}
+
+.verification-icon {
+    font-size: 48px;
+    margin-bottom: 20px;
+}
+
+.verification-required-card h2 {
+    color: #f0b90b;
+    margin-bottom: 20px;
+    font-size: 28px;
+}
+
+.verification-required-card p {
+    color: #e0e0e0;
+    margin-bottom: 30px;
+    font-size: 16px;
+    line-height: 1.5;
+}
+
+.verification-info {
+    background-color: rgba(240, 185, 11, 0.05);
+    border-radius: 8px;
+    padding: 20px;
+    margin-bottom: 30px;
+    text-align: left;
+}
+
+.verification-info h3 {
+    color: #e0e0e0;
+    margin-bottom: 15px;
+    font-size: 18px;
+}
+
+.verification-info ul {
+    padding-left: 20px;
+    color: #b0b0b0;
+}
+
+.verification-info li {
+    margin-bottom: 10px;
+    line-height: 1.4;
+}
+
+.verification-actions {
+    display: flex;
+    gap: 15px;
+    justify-content: center;
+}
+
+.primary-button {
+    background-color: #f0b90b;
+    color: #131722;
+    border: none;
+    padding: 12px 24px;
+    border-radius: 4px;
+    font-weight: bold;
+    cursor: pointer;
+    transition: background-color 0.3s;
+}
+
+.primary-button:hover {
+    background-color: #e0aa0b;
+}
+
+.secondary-button {
+    background-color: transparent;
+    color: #f0b90b;
+    border: 1px solid #f0b90b;
+    padding: 12px 24px;
+    border-radius: 4px;
+    font-weight: bold;
+    cursor: pointer;
+    transition: background-color 0.3s;
+}
+
+.secondary-button:hover {
+    background-color: rgba(240, 185, 11, 0.1);
+}
+
+@media (max-width: 768px) {
+    .verification-actions {
+        flex-direction: column;
+    }
+
+    .verification-required-card {
+        padding: 25px;
+    }
+}
