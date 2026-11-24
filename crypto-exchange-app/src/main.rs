@@ -41,8 +41,7 @@ use argon2::{
 };
 use serde::{Deserialize, Serialize};
 
-const UPLOAD_DIR: &str =
-    "/home/maria/Documents/cryptocurrency-exchange/crypto-exchange-app/uploads/id_documents";
+const UPLOAD_DIR: &str = "uploads/id_documents";
 
 fn is_valid_image(content_type: &Mime) -> bool {
     match content_type.to_string().as_str() {
@@ -787,8 +786,8 @@ async fn serve_document(
         Ok(_) => {
             // Admin is authenticated, serve the file
             let filename = filename.into_inner();
-            // Fix: Look for files in the correct directory
-            let path = PathBuf::from("uploads/id_documents").join(&filename);
+            // Fix: Look for files in the shared upload directory
+            let path = PathBuf::from(UPLOAD_DIR).join(&filename);
 
             log::info!("Attempting to serve document: {:?}", path);
 
